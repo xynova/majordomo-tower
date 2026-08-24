@@ -32,6 +32,12 @@ Served (app) repos stay clean. Default trigger is **pull mode**: cron polls SCM 
 
 No workflow files are required in the served repo.
 
+Clone with submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/xynova/majordomo-tower.git
+```
+
 ## Update the pipeline pin
 
 ```bash
@@ -40,15 +46,3 @@ git add .majordomo
 git commit -m "Bump majordomo submodule"
 git push
 ```
-
-## First-time submodule (after majordomo has commits)
-
-[`behaviorengineering/majordomo`](https://github.com/behaviorengineering/majordomo) must have at least one commit on `main` before the pin works:
-
-```bash
-git submodule add https://github.com/behaviorengineering/majordomo.git .majordomo
-git commit -m "Add majordomo pipeline submodule"
-git push
-```
-
-Until then, workflows check out this tower only; the poll/review stubs log if `.majordomo` is missing.
