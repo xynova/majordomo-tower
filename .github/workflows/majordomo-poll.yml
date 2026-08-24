@@ -1,0 +1,33 @@
+# Majordomo poll — reconciliation (GitHub Actions cron floor: 5 minutes).
+# Stub until Phase 1 wires `majordomo poll` from the .majordomo submodule.
+name: majordomo-poll
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tower (with submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Poll stub
+        run: |
+          echo "majordomo-poll stub — Phase 1 will run:"
+          echo "  .majordomo binary or docker → majordomo poll"
+          echo "Config dir: majordomo-central-config/"
+          ls -la majordomo-central-config/ || true
+          if [ -d .majordomo ]; then
+            echo "Submodule present:"
+            git -C .majordomo rev-parse --short HEAD || true
+          else
+            echo "WARNING: .majordomo submodule missing"
+          fi

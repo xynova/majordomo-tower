@@ -1,0 +1,22 @@
+# Majordomo — repository operations for evolving software.
+# Org-wide defaults for the control tower (xynova/majordomo-tower).
+# Per-repo files deep-merge on top: majordomo-central-config/<repo-id>.yaml
+
+trigger:
+  poll: true
+  interval: 5m
+  push:
+    mode: none
+
+cache:
+  repo: served
+  retentionDays: 120
+  enableSkips: false
+
+pollCache:
+  repo: served
+  # branch defaults to majordomo-poll-cache/<repo-id>
+
+review:
+  publishMode: auto
+  enableContinuousRuns: false

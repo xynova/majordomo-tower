@@ -1,0 +1,43 @@
+# Majordomo review job — invoked by poll or repository_dispatch (push modes).
+# Stub until Phase 1 wires majordomo orchestrate / publish.
+name: majordomo-review
+
+on:
+  repository_dispatch:
+    types: [majordomo-review]
+  workflow_dispatch:
+    inputs:
+      repo_id:
+        description: Served repo id (majordomo-central-config/<repo_id>.yaml)
+        required: true
+        type: string
+      review_id:
+        description: Dedup key scm:owner/repo:change_id:head_sha
+        required: false
+        type: string
+
+concurrency:
+  group: majordomo-${{ github.event.client_payload.review_id || inputs.review_id || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tower (with submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Review stub
+        env:
+          REPO_ID: ${{ github.event.client_payload.repo_id || inputs.repo_id }}
+          REVIEW_ID: ${{ github.event.client_payload.review_id || inputs.review_id }}
+        run: |
+          echo "majordomo-review stub — Phase 1 will run orchestrate + publish"
+          echo "repo_id=${REPO_ID}"
+          echo "review_id=${REVIEW_ID}"
+          ls -la majordomo-central-config/ || true
