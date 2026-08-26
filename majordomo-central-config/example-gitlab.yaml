@@ -1,0 +1,32 @@
+# Example GitLab served-repo config (copy to <repo_id>.yaml and edit).
+# Secret: MAJORDOMO_CREDENTIAL__EXAMPLE_GITLAB (or GITLAB_TOKEN with api + read_repository).
+
+scm: gitlab
+
+repository:
+  id: example-gitlab
+  # Nested groups: owner can be "group/subgroup"
+  owner: YOUR_GROUP
+  name: YOUR_PROJECT
+  cloneUrl: https://gitlab.com/YOUR_GROUP/YOUR_PROJECT.git
+
+scmApi:
+  baseUrl: https://gitlab.com
+  # Numeric project id OR leave empty to use owner/name (URL-encoded path)
+  # projectId: "12345"
+
+trigger:
+  poll: true
+  interval: 5m
+  push:
+    mode: none
+
+cache:
+  repo: served
+  retentionDays: 120
+  enableSkips: false
+
+pollCache:
+  repo: served
+
+publishMode: auto

@@ -1,4 +1,11 @@
 # Majordomo review job — invoked by poll or repository_dispatch (push modes).
+#
+# Forge job containers (recommended for github|gitlab publish):
+#   Set repository variable MAJORDOMO_FORGE_IMAGE to your registry tag, e.g.
+#     ghcr.io/org/majordomo-gh:<sha>   or   …/majordomo-glab:<sha>
+#   Or pass forge_image via workflow_dispatch / client_payload.
+#   Then uncomment the `container:` block below (empty image names fail the job).
+# Majordomo Go binary is built in-job into the workspace; it shells to gh/glab on PATH.
 name: majordomo-review
 
 on:
@@ -31,7 +38,7 @@ on:
         required: true
         type: string
       scm:
-        description: github|bitbucket
+        description: github|gitlab|bitbucket
         required: false
         default: github
         type: string
@@ -41,11 +48,15 @@ on:
         default: auto
         type: string
       owner:
-        description: GitHub owner (for publish)
+        description: Forge owner/group path (for publish)
         required: false
         type: string
       name:
-        description: GitHub repo name (for publish)
+        description: Forge repo/project name (for publish)
+        required: false
+        type: string
+      forge_image:
+        description: Optional majordomo-gh / majordomo-glab image (document in job container)
         required: false
         type: string
 
@@ -61,6 +72,9 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
+    # Uncomment when MAJORDOMO_FORGE_IMAGE or forge_image is always set for this tower:
+    # container:
+    #   image: ${{ github.event.client_payload.forge_image || inputs.forge_image || vars.MAJORDOMO_FORGE_IMAGE }}
     env:
       REPO_ID: ${{ github.event.client_payload.repo_id || inputs.repo_id }}
       REVIEW_ID: ${{ github.event.client_payload.review_id || inputs.review_id }}
@@ -72,6 +86,7 @@ jobs:
       PUBLISH_MODE: ${{ github.event.client_payload.publish_mode || inputs.publish_mode || 'auto' }}
       OWNER: ${{ github.event.client_payload.owner || inputs.owner }}
       NAME: ${{ github.event.client_payload.name || inputs.name }}
+      FORGE_IMAGE: ${{ github.event.client_payload.forge_image || inputs.forge_image || vars.MAJORDOMO_FORGE_IMAGE }}
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v4
@@ -87,6 +102,31 @@ jobs:
       - name: Build majordomo
         run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
         working-directory: .majordomo
+
+      - name: Ensure forge CLI on PATH (host runner fallback)
+        if: env.SCM == 'github' || env.SCM == 'gitlab'
+        run: |
+          set -euo pipefail
+          if [ -n "${FORGE_IMAGE:-}" ]; then
+            echo "FORGE_IMAGE=${FORGE_IMAGE} — prefer running this job with container.image set to that tag"
+          fi
+          if [ "${SCM}" = "github" ] && ! command -v gh >/dev/null 2>&1; then
+            echo "Installing GitHub CLI (gh) on runner…"
+            (type -p wget >/dev/null || (sudo apt-get update && sudo apt-get install -y wget))
+            sudo mkdir -p -m 755 /etc/apt/keyrings
+            out=$(mktemp)
+            wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+            cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+            sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+              | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt-get update && sudo apt-get install -y gh
+            gh --version
+          fi
+          if [ "${SCM}" = "gitlab" ] && ! command -v glab >/dev/null 2>&1; then
+            echo "glab missing — use majordomo-glab job container (MAJORDOMO_FORGE_IMAGE) or install glab on the runner"
+            exit 1
+          fi
 
       - name: Resolve served-repo credential
         id: cred
@@ -132,8 +172,7 @@ jobs:
           STAGING="${{ github.workspace }}/staging/${REPO_ID}-pr-${PR_NUMBER}"
           OUTPUT="${{ github.workspace }}/review-output/${REPO_ID}/pr-review"
           mkdir -p "${STAGING}" "${OUTPUT}"
-          # Agent CLI may be unavailable on ubuntu-latest — orchestrate still runs prep/waves;
-          # dispatch will fail without `copilot`. Mark continue for dry wiring; set secret later.
+          # OpenCode agent may be a separate container later; dispatch fails without provider keys.
           ./majordomo orchestrate \
             --pr "${PR_NUMBER}" \
             --base-branch "${BASE_BRANCH}" \
@@ -147,12 +186,13 @@ jobs:
       - name: Publish summary (if present)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ env.OWNER }}/${{ env.NAME }}
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           set -euo pipefail
           SUMMARY="${{ github.workspace }}/review-output/${REPO_ID}/pr-review/summary.md"
           if [ ! -f "${SUMMARY}" ]; then
-            # summary may live under pipeline output parent
             SUMMARY=$(find "${{ github.workspace }}/review-output/${REPO_ID}" -name summary.md | head -n1 || true)
           fi
           if [ -z "${SUMMARY}" ] || [ ! -f "${SUMMARY}" ]; then
