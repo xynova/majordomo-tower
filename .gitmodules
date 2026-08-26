@@ -1,3 +1,4 @@
 [submodule ".majordomo"]
 	path = .majordomo
 	url = https://github.com/behaviorengineering/majordomo.git
+	branch = new1

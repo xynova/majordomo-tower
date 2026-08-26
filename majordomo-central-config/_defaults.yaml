@@ -22,7 +22,7 @@ review:
   publishMode: auto
   # false: review each open PR/MR once (until cursor cleared).
   # true: re-queue whenever head_sha changes.
-  enableContinuousRuns: false
+  enableContinuousRuns: true
 
 pipelines:
   pr-review:
