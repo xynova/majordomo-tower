@@ -10,7 +10,9 @@ This repo holds:
 - **`majordomo-central-config/`** — org defaults and per-served-repo YAML
 - **`.github/workflows/`** — GitHub Actions (poll + review); burns Actions minutes here
 
-Served (app) repos stay clean. Default trigger is **pull mode**: cron polls SCM APIs every 5 minutes and reconciles open PRs/MRs. See the [migration plan](https://github.com/behaviorengineering/majordomo/blob/main/docs/PLAN-control-tower-github-go.md) for architecture.
+Served (app) repos stay clean. Default trigger is **pull mode**: cron polls SCM APIs every 5 minutes and reconciles open PRs/MRs.
+
+**Onboarding:** [docs/onboarding-pull-mode.md](docs/onboarding-pull-mode.md)
 
 ## Layout
 
@@ -18,17 +20,20 @@ Served (app) repos stay clean. Default trigger is **pull mode**: cron polls SCM 
 .
 ├── .majordomo/                      # submodule → behaviorengineering/majordomo
 ├── majordomo-central-config/
-│   └── _defaults.yaml
+│   ├── _defaults.yaml
+│   └── example-github.yaml          # copy → <repo_id>.yaml
+├── docs/
+│   └── onboarding-pull-mode.md
 └── .github/workflows/
-    ├── majordomo-poll.yml
-    └── majordomo-review.yml
+    ├── majordomo-poll.yml           # build Go CLI → poll → queue reviews
+    └── majordomo-review.yml         # clone served repo → orchestrate → publish
 ```
 
 ## Onboard a served repo (pull mode)
 
-1. Store a forge credential in this repo’s secrets: `MAJORDOMO_CREDENTIAL__<repo_id>`
-2. Add `majordomo-central-config/<repo_id>.yaml`
-3. Wait for the next poll cycle (or run **Actions → majordomo-poll → Run workflow**)
+1. Add `majordomo-central-config/<repo_id>.yaml` (see `example-github.yaml`)
+2. Ensure a forge credential can clone the served repo (see onboarding doc)
+3. Run **Actions → majordomo-poll → Run workflow** (or wait for cron)
 
 No workflow files are required in the served repo.
 

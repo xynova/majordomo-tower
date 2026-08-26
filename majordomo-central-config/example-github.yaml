@@ -1,0 +1,26 @@
+# Example GitHub served-repo config (copy to <repo_id>.yaml and edit).
+# Secret: MAJORDOMO_CREDENTIAL__EXAMPLE_GITHUB (or rely on GITHUB_TOKEN for public repos).
+
+scm: github
+
+repository:
+  id: example-github
+  owner: YOUR_ORG
+  name: YOUR_REPO
+  cloneUrl: https://github.com/YOUR_ORG/YOUR_REPO.git
+
+trigger:
+  poll: true
+  interval: 5m
+  push:
+    mode: none
+
+cache:
+  repo: served
+  retentionDays: 120
+  enableSkips: false
+
+pollCache:
+  repo: served
+
+publishMode: auto

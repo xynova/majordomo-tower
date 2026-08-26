@@ -1,5 +1,5 @@
 # Majordomo poll — reconciliation (GitHub Actions cron floor: 5 minutes).
-# Stub until Phase 1 wires `majordomo poll` from the .majordomo submodule.
+# Builds Go CLI from .majordomo submodule and queues review workflows for new PR heads.
 name: majordomo-poll
 
 on:
@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   poll:
@@ -19,15 +20,75 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Poll stub
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .majordomo/go.mod
+          cache-dependency-path: .majordomo/go.sum
+
+      - name: Build majordomo
         run: |
-          echo "majordomo-poll stub — Phase 1 will run:"
-          echo "  .majordomo binary or docker → majordomo poll"
-          echo "Config dir: majordomo-central-config/"
-          ls -la majordomo-central-config/ || true
-          if [ -d .majordomo ]; then
-            echo "Submodule present:"
-            git -C .majordomo rev-parse --short HEAD || true
-          else
-            echo "WARNING: .majordomo submodule missing"
+          go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
+        working-directory: .majordomo
+
+      - name: Restore poll cursor cache
+        uses: actions/cache@v4
+        with:
+          path: .poll-cache
+          key: majordomo-poll-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            majordomo-poll-cache-${{ runner.os }}-
+
+      - name: Discover pending reviews
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./majordomo poll \
+            --config-dir majordomo-central-config \
+            --cursor-dir .poll-cache \
+            --out pending-reviews.json
+          echo "---- pending-reviews.json ----"
+          cat pending-reviews.json
+
+      - name: Queue review workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          count=$(jq '.reviews | length' pending-reviews.json)
+          echo "Pending reviews: ${count}"
+          if [ "${count}" = "0" ]; then
+            echo "Nothing to queue"
+            exit 0
           fi
+          jq -c '.reviews[]' pending-reviews.json | while read -r row; do
+            repo_id=$(echo "$row" | jq -r '.repo_id')
+            review_id=$(echo "$row" | jq -r '.review_id')
+            pr=$(echo "$row" | jq -r '.pr')
+            head_sha=$(echo "$row" | jq -r '.head_sha')
+            base_branch=$(echo "$row" | jq -r '.base_branch')
+            clone_url=$(echo "$row" | jq -r '.clone_url')
+            scm=$(echo "$row" | jq -r '.scm')
+            publish_mode=$(echo "$row" | jq -r '.publish_mode // "auto"')
+            owner=$(echo "$row" | jq -r '.owner')
+            name=$(echo "$row" | jq -r '.name')
+            echo "Queueing review for ${repo_id} PR #${pr} @ ${head_sha}"
+            gh workflow run majordomo-review.yml \
+              --repo "${{ github.repository }}" \
+              -f repo_id="${repo_id}" \
+              -f review_id="${review_id}" \
+              -f pr_number="${pr}" \
+              -f head_sha="${head_sha}" \
+              -f base_branch="${base_branch}" \
+              -f clone_url="${clone_url}" \
+              -f scm="${scm}" \
+              -f publish_mode="${publish_mode}" \
+              -f owner="${owner}" \
+              -f name="${name}"
+          done
+
+      - name: Upload pending artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pending-reviews
+          path: pending-reviews.json
+          if-no-files-found: ignore

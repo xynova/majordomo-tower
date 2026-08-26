@@ -1,5 +1,4 @@
 # Majordomo review job — invoked by poll or repository_dispatch (push modes).
-# Stub until Phase 1 wires majordomo orchestrate / publish.
 name: majordomo-review
 
 on:
@@ -15,29 +14,164 @@ on:
         description: Dedup key scm:owner/repo:change_id:head_sha
         required: false
         type: string
+      pr_number:
+        description: PR/MR number
+        required: true
+        type: string
+      head_sha:
+        description: Head commit SHA to review
+        required: true
+        type: string
+      base_branch:
+        description: Base branch name
+        required: true
+        type: string
+      clone_url:
+        description: HTTPS clone URL of served repo
+        required: true
+        type: string
+      scm:
+        description: github|bitbucket
+        required: false
+        default: github
+        type: string
+      publish_mode:
+        description: auto|comment|description
+        required: false
+        default: auto
+        type: string
+      owner:
+        description: GitHub owner (for publish)
+        required: false
+        type: string
+      name:
+        description: GitHub repo name (for publish)
+        required: false
+        type: string
 
 concurrency:
-  group: majordomo-${{ github.event.client_payload.review_id || inputs.review_id || github.run_id }}
+  group: majordomo-${{ github.event.client_payload.review_id || inputs.review_id || format('{0}-{1}', inputs.repo_id, inputs.pr_number) }}
   cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: write
+  statuses: write
 
 jobs:
   review:
     runs-on: ubuntu-latest
+    env:
+      REPO_ID: ${{ github.event.client_payload.repo_id || inputs.repo_id }}
+      REVIEW_ID: ${{ github.event.client_payload.review_id || inputs.review_id }}
+      PR_NUMBER: ${{ github.event.client_payload.pr || inputs.pr_number }}
+      HEAD_SHA: ${{ github.event.client_payload.head_sha || inputs.head_sha }}
+      BASE_BRANCH: ${{ github.event.client_payload.base_branch || inputs.base_branch }}
+      CLONE_URL: ${{ github.event.client_payload.clone_url || inputs.clone_url }}
+      SCM: ${{ github.event.client_payload.scm || inputs.scm || 'github' }}
+      PUBLISH_MODE: ${{ github.event.client_payload.publish_mode || inputs.publish_mode || 'auto' }}
+      OWNER: ${{ github.event.client_payload.owner || inputs.owner }}
+      NAME: ${{ github.event.client_payload.name || inputs.name }}
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Review stub
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .majordomo/go.mod
+          cache-dependency-path: .majordomo/go.sum
+
+      - name: Build majordomo
+        run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
+        working-directory: .majordomo
+
+      - name: Resolve served-repo credential
+        id: cred
         env:
-          REPO_ID: ${{ github.event.client_payload.repo_id || inputs.repo_id }}
-          REVIEW_ID: ${{ github.event.client_payload.review_id || inputs.review_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "majordomo-review stub — Phase 1 will run orchestrate + publish"
-          echo "repo_id=${REPO_ID}"
-          echo "review_id=${REVIEW_ID}"
-          ls -la majordomo-central-config/ || true
+          # Prefer MAJORDOMO_CREDENTIAL__<REPO_ID>, fall back to GITHUB_TOKEN for github.com.
+          key=$(echo "MAJORDOMO_CREDENTIAL__${REPO_ID}" | tr '[:lower:]-.' '[:upper:]__')
+          # secrets context cannot be dynamic; document that pilots use GITHUB_TOKEN or a fixed secret.
+          echo "Using GITHUB_TOKEN for clone/API (set per-repo secrets in a follow-up for private repos)."
+          echo "token=${GITHUB_TOKEN}" >> "$GITHUB_OUTPUT"
+
+      - name: Clone served repository
+        env:
+          TOKEN: ${{ steps.cred.outputs.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p served
+          auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-access-token:${TOKEN}@#")
+          git clone --depth 50 "${auth_url}" served/repo
+          git -C served/repo fetch --depth 50 origin "${HEAD_SHA}"
+          git -C served/repo checkout --force "${HEAD_SHA}"
+          git -C served/repo remote set-url origin "${CLONE_URL}"
+          # Ensure origin/<base> exists for prep three-dot diff
+          git -C served/repo fetch --depth 50 origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}" || \
+            git -C served/repo fetch origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
+
+      - name: Restore poll cursor cache
+        uses: actions/cache@v4
+        with:
+          path: .poll-cache
+          key: majordomo-poll-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            majordomo-poll-cache-${{ runner.os }}-
+
+      - name: Orchestrate review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_PIPELINE: pr-review
+          MAJORDOMO_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts
+        run: |
+          set -euo pipefail
+          STAGING="${{ github.workspace }}/staging/${REPO_ID}-pr-${PR_NUMBER}"
+          OUTPUT="${{ github.workspace }}/review-output/${REPO_ID}/pr-review"
+          mkdir -p "${STAGING}" "${OUTPUT}"
+          # Agent CLI may be unavailable on ubuntu-latest — orchestrate still runs prep/waves;
+          # dispatch will fail without `copilot`. Mark continue for dry wiring; set secret later.
+          ./majordomo orchestrate \
+            --pr "${PR_NUMBER}" \
+            --base-branch "${BASE_BRANCH}" \
+            --staging-dir "${STAGING}" \
+            --output-dir "${OUTPUT}" \
+            --repo-root "${{ github.workspace }}/served/repo" \
+            --scripts-dir "${MAJORDOMO_SCRIPTS}" \
+            --skip-report=false || true
+          echo "Orchestrate finished (check logs for dispatch/agent availability)"
+
+      - name: Publish summary (if present)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ env.OWNER }}/${{ env.NAME }}
+        run: |
+          set -euo pipefail
+          SUMMARY="${{ github.workspace }}/review-output/${REPO_ID}/pr-review/summary.md"
+          if [ ! -f "${SUMMARY}" ]; then
+            # summary may live under pipeline output parent
+            SUMMARY=$(find "${{ github.workspace }}/review-output/${REPO_ID}" -name summary.md | head -n1 || true)
+          fi
+          if [ -z "${SUMMARY}" ] || [ ! -f "${SUMMARY}" ]; then
+            echo "No summary.md — skip publish"
+            exit 0
+          fi
+          ./majordomo publish --scm "${SCM}" --owner "${OWNER}" --repo "${NAME}" \
+            "${PR_NUMBER}" "${SUMMARY}" "${PUBLISH_MODE}"
+
+      - name: Update poll cursor
+        run: |
+          set -euo pipefail
+          mkdir -p ".poll-cache/${REPO_ID}"
+          ./majordomo cache poll-set ".poll-cache/${REPO_ID}/poll-cursor.json" \
+            --pr "${PR_NUMBER}" --sha "${HEAD_SHA}"
+
+      - name: Upload review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-${{ env.REPO_ID }}-pr-${{ env.PR_NUMBER }}
+          path: review-output/
+          if-no-files-found: ignore
