@@ -1,0 +1,10 @@
+# Served repo: https://github.com/behaviorengineering/gitboard
+# Secret: GH_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_GITBOARD).
+
+scm: github
+
+repository:
+  id: gitboard
+  owner: behaviorengineering
+  name: gitboard
+  cloneUrl: https://github.com/behaviorengineering/gitboard.git

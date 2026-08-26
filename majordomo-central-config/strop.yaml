@@ -1,0 +1,10 @@
+# Served repo: https://github.com/behaviorengineering/strop
+# Secret: GH_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_STROP).
+
+scm: github
+
+repository:
+  id: strop
+  owner: behaviorengineering
+  name: strop
+  cloneUrl: https://github.com/behaviorengineering/strop.git

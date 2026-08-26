@@ -1,0 +1,10 @@
+# Served repo: https://github.com/behaviorengineering/majordomo
+# Secret: GH_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_MAJORDOMO).
+
+scm: github
+
+repository:
+  id: majordomo
+  owner: behaviorengineering
+  name: majordomo
+  cloneUrl: https://github.com/behaviorengineering/majordomo.git

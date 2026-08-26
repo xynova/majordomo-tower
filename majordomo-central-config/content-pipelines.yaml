@@ -1,0 +1,10 @@
+# Served repo: https://github.com/xynova/content-pipelines
+# Secret: GH_TOKEN_XYNOVA (optional override MAJORDOMO_CREDENTIAL_CONTENT_PIPELINES).
+
+scm: github
+
+repository:
+  id: content-pipelines
+  owner: xynova
+  name: content-pipelines
+  cloneUrl: https://github.com/xynova/content-pipelines.git

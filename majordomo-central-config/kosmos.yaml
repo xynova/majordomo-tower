@@ -1,0 +1,13 @@
+# Served repo: https://gitlab.com/behaviorengineering/kosmos
+# Secret: GITLAB_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_KOSMOS).
+
+scm: gitlab
+
+repository:
+  id: kosmos
+  owner: behaviorengineering
+  name: kosmos
+  cloneUrl: https://gitlab.com/behaviorengineering/kosmos.git
+
+scmApi:
+  baseUrl: https://gitlab.com

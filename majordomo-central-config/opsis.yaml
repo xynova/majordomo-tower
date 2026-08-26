@@ -1,0 +1,13 @@
+# Served repo: https://gitlab.com/behaviorengineering/opsis
+# Secret: GITLAB_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_OPSIS).
+
+scm: gitlab
+
+repository:
+  id: opsis
+  owner: behaviorengineering
+  name: opsis
+  cloneUrl: https://gitlab.com/behaviorengineering/opsis.git
+
+scmApi:
+  baseUrl: https://gitlab.com

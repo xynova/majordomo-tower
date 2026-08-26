@@ -1,0 +1,10 @@
+# Served repo: https://github.com/xynova/content-pipelines-mcp
+# Secret: GH_TOKEN_XYNOVA (optional override MAJORDOMO_CREDENTIAL_CONTENT_PIPELINES_MCP).
+
+scm: github
+
+repository:
+  id: content-pipelines-mcp
+  owner: xynova
+  name: content-pipelines-mcp
+  cloneUrl: https://github.com/xynova/content-pipelines-mcp.git
