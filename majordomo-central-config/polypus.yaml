@@ -1,0 +1,10 @@
+# Served repo: https://github.com/behaviorengineering/polypus
+# Secret: GH_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_POLYPUS).
+
+scm: github
+
+repository:
+  id: polypus
+  owner: behaviorengineering
+  name: polypus
+  cloneUrl: https://github.com/behaviorengineering/polypus.git

@@ -1,0 +1,13 @@
+# Served repo: https://gitlab.com/behaviorengineering/renderforge
+# Secret: GITLAB_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_RENDERFORGE).
+
+scm: gitlab
+
+repository:
+  id: renderforge
+  owner: behaviorengineering
+  name: renderforge
+  cloneUrl: https://gitlab.com/behaviorengineering/renderforge.git
+
+scmApi:
+  baseUrl: https://gitlab.com

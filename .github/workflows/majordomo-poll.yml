@@ -39,9 +39,13 @@ jobs:
           restore-keys: |
             majordomo-poll-cache-${{ runner.os }}-
 
+      # Served-repo tokens (map each org secret explicitly; Actions has no dynamic secret names).
+      # Lookup in majordomo: MAJORDOMO_CREDENTIAL_<REPO_ID> then GH_TOKEN_<OWNER> / GITLAB_TOKEN_<OWNER>.
       - name: Discover pending reviews
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
+          GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
+          GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
         run: |
           ./majordomo poll \
             --config-dir majordomo-central-config \
@@ -52,6 +56,7 @@ jobs:
 
       - name: Queue review workflows
         env:
+          # Tower Actions token only (gh workflow run on this repo).
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           count=$(jq '.reviews | length' pending-reviews.json)

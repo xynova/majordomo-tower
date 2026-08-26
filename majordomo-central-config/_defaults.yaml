@@ -11,7 +11,8 @@ trigger:
 cache:
   repo: served
   retentionDays: 120
-  enableSkips: false
+  # Analysis-cache skips are on by default. Opt out with:
+  # disableSkips: true
 
 pollCache:
   repo: served
@@ -19,4 +20,33 @@ pollCache:
 
 review:
   publishMode: auto
-  enableContinuousRuns: false
+  # false: review each open PR/MR once (until cursor cleared).
+  # true: re-queue whenever head_sha changes.
+  enableContinuousRuns: true
+
+pipelines:
+  pr-review:
+    # model: anthropic/claude-sonnet-4-5
+    # scoreModel: auto
+    routing:
+      pr-review-docs:
+        - "**/*.md"
+        - "**/*.rst"
+      pr-review-conf:
+        - "**/*.yml"
+        - "**/*.yaml"
+        - "**/*.toml"
+        - "**/*.json"
+        - "**/*.ini"
+        - "**/*.cfg"
+        - "**/*.env"
+        - "**/*.xml"
+      pr-review-code:
+        - "**"
+
+# Example static analysis (images must be reachable from the runner):
+# staticAnalysis:
+#   - tool: ruff
+#     image: ghcr.io/YOUR_ORG/sa-ruff:latest
+#     command: check --output-format=concise
+#     glob: "**/*.py"

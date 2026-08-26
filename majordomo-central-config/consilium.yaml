@@ -1,0 +1,13 @@
+# Served repo: https://gitlab.com/behaviorengineering/consilium
+# Secret: GITLAB_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_CONSILIUM).
+
+scm: gitlab
+
+repository:
+  id: consilium
+  owner: behaviorengineering
+  name: consilium
+  cloneUrl: https://gitlab.com/behaviorengineering/consilium.git
+
+scmApi:
+  baseUrl: https://gitlab.com

@@ -8,21 +8,36 @@
 - A GitHub or GitLab served app repo with open PRs/MRs
 - Forge token able to list open changes and (later) write comments/statuses
 
+## Credential model
+
+One token **per SCM org/group** (fine-grained GitHub PAT or GitLab group token). Optional per-repo override.
+
+| Secret name | When |
+|-------------|------|
+| `GH_TOKEN_<OWNER>` | GitHub served repos under that org (Actions forbids `GITHUB_TOKEN_*`) |
+| `GITLAB_TOKEN_<OWNER>` | GitLab served projects under that group (`group/sub` → `GROUP_SUB`) |
+| `MAJORDOMO_CREDENTIAL_<REPO_ID>` | Optional override for one repo only |
+
+Lookup order in `majordomo poll` / `publish`: per-repo override → org/group token. Unqualified `GH_TOKEN` / `GITLAB_TOKEN` are **not** used for served repos.
+
+Actions cannot read secrets by dynamic name. Map each org secret into the poll and review job `env:` blocks (see workflows).
+
+The workflow `secrets.GITHUB_TOKEN` is only for operating on **this tower** (e.g. `gh workflow run`).
+
 ## Steps
 
 1. **Credential**
-   - Per-repo secret `MAJORDOMO_CREDENTIAL__<REPO_ID>` (uppercased, non-alnum → `_`), or:
-     - GitHub: `GITHUB_TOKEN` / `GH_TOKEN`
-     - GitLab: `GITLAB_TOKEN` / `GITLAB_PAT` (scopes: `api` or at least `read_api` + `read_repository`)
-   - *Note: GitHub Actions cannot read secrets by dynamic name yet — map named secrets into env in the poll workflow for your pilot.*
+   - Create a fine-grained GitHub PAT (one resource owner) or GitLab group token with list + comment scopes
+   - Add tower secrets: `GH_TOKEN_XYNOVA`, `GH_TOKEN_BEHAVIORENGINEERING`, `GITLAB_TOKEN_BEHAVIORENGINEERING`, etc.
+   - Ensure poll/review workflows pass those env vars into the job
 
 2. **Config**
    - GitHub: copy [`example-github.yaml`](../majordomo-central-config/example-github.yaml)
    - GitLab: copy [`example-gitlab.yaml`](../majordomo-central-config/example-gitlab.yaml)
-   - Save as `majordomo-central-config/<repo_id>.yaml` and set `repository.*` / `scmApi.*`
+   - Save as `majordomo-central-config/<repo_id>.yaml` and set `repository.*` / `scmApi.*` (include `repository.owner`)
 
 3. **Pin pipeline**
-   - Ensure `.majordomo` submodule points at a majordomo SHA that includes GitHub + GitLab `poll`
+   - Ensure `.majordomo` submodule points at a majordomo SHA that includes org-scoped credential lookup
 
 4. **Run**
    - **Actions → majordomo-poll → Run workflow** (or wait for the 5-minute cron)

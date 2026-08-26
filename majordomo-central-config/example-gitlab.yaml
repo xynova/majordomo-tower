@@ -1,5 +1,6 @@
 # Example GitLab served-repo config (copy to <repo_id>.yaml and edit).
-# Secret: MAJORDOMO_CREDENTIAL__EXAMPLE_GITLAB (or GITLAB_TOKEN with api + read_repository).
+# Secret: GITLAB_TOKEN_YOUR_GROUP (optional override MAJORDOMO_CREDENTIAL_EXAMPLE_GITLAB).
+# Org defaults live in _defaults.yaml — only override what differs.
 
 scm: gitlab
 
@@ -14,19 +15,3 @@ scmApi:
   baseUrl: https://gitlab.com
   # Numeric project id OR leave empty to use owner/name (URL-encoded path)
   # projectId: "12345"
-
-trigger:
-  poll: true
-  interval: 5m
-  push:
-    mode: none
-
-cache:
-  repo: served
-  retentionDays: 120
-  enableSkips: false
-
-pollCache:
-  repo: served
-
-publishMode: auto

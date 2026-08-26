@@ -87,6 +87,10 @@ jobs:
       OWNER: ${{ github.event.client_payload.owner || inputs.owner }}
       NAME: ${{ github.event.client_payload.name || inputs.name }}
       FORGE_IMAGE: ${{ github.event.client_payload.forge_image || inputs.forge_image || vars.MAJORDOMO_FORGE_IMAGE }}
+      # Served-repo org tokens (add rows when onboarding a new org/group).
+      GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
+      GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
+      GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v4
@@ -130,14 +134,28 @@ jobs:
 
       - name: Resolve served-repo credential
         id: cred
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Prefer MAJORDOMO_CREDENTIAL__<REPO_ID>, fall back to GITHUB_TOKEN for github.com.
-          key=$(echo "MAJORDOMO_CREDENTIAL__${REPO_ID}" | tr '[:lower:]-.' '[:upper:]__')
-          # secrets context cannot be dynamic; document that pilots use GITHUB_TOKEN or a fixed secret.
-          echo "Using GITHUB_TOKEN for clone/API (set per-repo secrets in a follow-up for private repos)."
-          echo "token=${GITHUB_TOKEN}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          # Match majordomo ResolveCredential: per-repo override, then org/group token.
+          # Org secrets must already be in job env (see GH_TOKEN_* / GITLAB_TOKEN_* above).
+          repo_key=$(echo "${REPO_ID}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
+          owner_key=$(echo "${OWNER}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
+          per_repo_var="MAJORDOMO_CREDENTIAL_${repo_key}"
+          token="${!per_repo_var:-}"
+          if [ -z "${token}" ]; then
+            if [ "${SCM}" = "gitlab" ]; then
+              org_var="GITLAB_TOKEN_${owner_key}"
+            else
+              org_var="GH_TOKEN_${owner_key}"
+            fi
+            token="${!org_var:-}"
+          fi
+          if [ -z "${token}" ]; then
+            echo "No credential for ${REPO_ID} (set MAJORDOMO_CREDENTIAL_${repo_key} or org token for owner ${OWNER})"
+            exit 1
+          fi
+          echo "Resolved credential for ${REPO_ID} (owner=${OWNER})"
+          echo "token=${token}" >> "$GITHUB_OUTPUT"
 
       - name: Clone served repository
         env:
@@ -162,9 +180,23 @@ jobs:
           restore-keys: |
             majordomo-poll-cache-${{ runner.os }}-
 
+      - name: Static analysis (from central config)
+        env:
+          MAJORDOMO_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts
+          MAJORDOMO_SA_IMAGE_PREFIX: ${{ vars.MAJORDOMO_SA_IMAGE_PREFIX }}
+          MAJORDOMO_SA_IMAGE_TAG: ${{ vars.MAJORDOMO_SA_IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+          ./majordomo sa \
+            --config-dir majordomo-central-config \
+            --repo-id "${REPO_ID}" \
+            --repo-root "${{ github.workspace }}/served/repo" \
+            --base-branch "${BASE_BRANCH}" \
+            --scripts-dir "${MAJORDOMO_SCRIPTS}" || true
+          echo "SA finished (missing images are non-fatal)"
+
       - name: Orchestrate review
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COPILOT_PIPELINE: pr-review
           MAJORDOMO_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts
         run: |
@@ -180,15 +212,15 @@ jobs:
             --output-dir "${OUTPUT}" \
             --repo-root "${{ github.workspace }}/served/repo" \
             --scripts-dir "${MAJORDOMO_SCRIPTS}" \
+            --config-dir majordomo-central-config \
+            --repo-id "${REPO_ID}" \
             --skip-report=false || true
           echo "Orchestrate finished (check logs for dispatch/agent availability)"
 
       - name: Publish summary (if present)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
           GITHUB_REPOSITORY: ${{ env.OWNER }}/${{ env.NAME }}
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           set -euo pipefail
           SUMMARY="${{ github.workspace }}/review-output/${REPO_ID}/pr-review/summary.md"
@@ -199,7 +231,9 @@ jobs:
             echo "No summary.md — skip publish"
             exit 0
           fi
+          # Token comes from job env GH_TOKEN_* / GITLAB_TOKEN_* / MAJORDOMO_CREDENTIAL_* via ResolveCredential.
           ./majordomo publish --scm "${SCM}" --owner "${OWNER}" --repo "${NAME}" \
+            --repo-id "${REPO_ID}" \
             "${PR_NUMBER}" "${SUMMARY}" "${PUBLISH_MODE}"
 
       - name: Update poll cursor

@@ -1,0 +1,13 @@
+# Served repo: https://gitlab.com/behaviorengineering/kairos
+# Secret: GITLAB_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_KAIROS).
+
+scm: gitlab
+
+repository:
+  id: kairos
+  owner: behaviorengineering
+  name: kairos
+  cloneUrl: https://gitlab.com/behaviorengineering/kairos.git
+
+scmApi:
+  baseUrl: https://gitlab.com
