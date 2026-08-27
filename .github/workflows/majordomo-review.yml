@@ -93,12 +93,12 @@ jobs:
       GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
     steps:
       - name: Checkout tower (with submodule)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: .majordomo/go.mod
           cache-dependency-path: .majordomo/go.sum
@@ -173,7 +173,7 @@ jobs:
             git -C served/repo fetch origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
 
       - name: Restore poll cursor cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .poll-cache
           key: majordomo-poll-cache-${{ runner.os }}-${{ github.run_id }}
@@ -244,7 +244,7 @@ jobs:
             --pr "${PR_NUMBER}" --sha "${HEAD_SHA}"
 
       - name: Upload review artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: review-${{ env.REPO_ID }}-pr-${{ env.PR_NUMBER }}
           path: review-output/
