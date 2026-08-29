@@ -18,6 +18,16 @@ pollCache:
   repo: served
   # branch defaults to majordomo-poll-cache/<repo-id>
 
+context:
+  repo: served
+  # branch defaults to majordomo-context/<repo-id>
+  # autoMerge: false
+  # gateCommentPrefix: "@majordomo"
+  # compaction:
+  #   maxChronologyEntries: 40
+  #   keepRecentEntries: 10
+  # maxCommitsPerRun: 20
+
 review:
   publishMode: auto
   # false: review each open PR/MR once (until cursor cleared).

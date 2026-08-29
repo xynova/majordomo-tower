@@ -91,6 +91,10 @@ jobs:
       GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
       GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
       GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
+      # LLM auth (per-run; never baked into images). At least one required for strop Judge.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -172,6 +176,23 @@ jobs:
           git -C served/repo fetch --depth 50 origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}" || \
             git -C served/repo fetch origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
 
+      - name: Checkout merged context branch (optional)
+        env:
+          TOKEN: ${{ steps.cred.outputs.token }}
+        run: |
+          set -euo pipefail
+          CONTEXT_BRANCH="majordomo-context/${REPO_ID}"
+          auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-access-token:${TOKEN}@#")
+          if git ls-remote "${auth_url}" "refs/heads/${CONTEXT_BRANCH}" | grep -q .; then
+            mkdir -p served/context
+            git clone --depth 1 --branch "${CONTEXT_BRANCH}" "${auth_url}" served/context/worktree
+            git -C served/context/worktree remote set-url origin "${CLONE_URL}"
+            echo "MAJORDOMO_CONTEXT_DIR=${{ github.workspace }}/served/context/worktree" >> "$GITHUB_ENV"
+            echo "Checked out merged context branch ${CONTEXT_BRANCH}"
+          else
+            echo "No context branch ${CONTEXT_BRANCH} — prep grounding skipped"
+          fi
+
       - name: Restore poll cursor cache
         uses: actions/cache@v5
         with:
@@ -179,6 +200,15 @@ jobs:
           key: majordomo-poll-cache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             majordomo-poll-cache-${{ runner.os }}-
+
+      - name: Ensure LLM auth for strop Judge
+        run: |
+          set -euo pipefail
+          if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "No LLM provider secret (set ANTHROPIC_API_KEY or OPENAI_API_KEY)"
+            exit 1
+          fi
+          echo "Judge driver: strop (in-process)"
 
       - name: Static analysis (from central config)
         env:
@@ -204,7 +234,10 @@ jobs:
           STAGING="${{ github.workspace }}/staging/${REPO_ID}-pr-${PR_NUMBER}"
           OUTPUT="${{ github.workspace }}/review-output/${REPO_ID}/pr-review"
           mkdir -p "${STAGING}" "${OUTPUT}"
-          # OpenCode agent may be a separate container later; dispatch fails without provider keys.
+          ctx_args=()
+          if [ -n "${MAJORDOMO_CONTEXT_DIR:-}" ]; then
+            ctx_args+=(--context-dir "${MAJORDOMO_CONTEXT_DIR}")
+          fi
           ./majordomo orchestrate \
             --pr "${PR_NUMBER}" \
             --base-branch "${BASE_BRANCH}" \
@@ -214,8 +247,9 @@ jobs:
             --scripts-dir "${MAJORDOMO_SCRIPTS}" \
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
-            --skip-report=false || true
-          echo "Orchestrate finished (check logs for dispatch/agent availability)"
+            --skip-report=false \
+            "${ctx_args[@]}"
+          echo "Orchestrate finished"
 
       - name: Publish summary (if present)
         env:
