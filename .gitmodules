@@ -1,7 +1,6 @@
 [submodule ".majordomo"]
 	path = .majordomo
 	url = https://github.com/behaviorengineering/majordomo.git
-	branch = new1
 [submodule ".cursor/packs/shared"]
 	path = .cursor/packs/shared
 	url = https://github.com/xynova/cursor-packs.git

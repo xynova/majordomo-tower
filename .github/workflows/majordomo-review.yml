@@ -91,7 +91,7 @@ jobs:
       GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
       GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
       GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
-      # LLM auth (per-run; never baked into images). At least one required for strop Judge.
+      # LLM auth for embedded Bifrost Account (Judge talks OpenAI loopback only).
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
@@ -116,10 +116,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${FORGE_IMAGE:-}" ]; then
-            echo "FORGE_IMAGE=${FORGE_IMAGE} — prefer running this job with container.image set to that tag"
+            echo "FORGE_IMAGE=${FORGE_IMAGE}: prefer running this job with container.image set to that tag"
           fi
           if [ "${SCM}" = "github" ] && ! command -v gh >/dev/null 2>&1; then
-            echo "Installing GitHub CLI (gh) on runner…"
+            echo "Installing GitHub CLI (gh) on runner"
             (type -p wget >/dev/null || (sudo apt-get update && sudo apt-get install -y wget))
             sudo mkdir -p -m 755 /etc/apt/keyrings
             out=$(mktemp)
@@ -132,65 +132,8 @@ jobs:
             gh --version
           fi
           if [ "${SCM}" = "gitlab" ] && ! command -v glab >/dev/null 2>&1; then
-            echo "glab missing — use majordomo-glab job container (MAJORDOMO_FORGE_IMAGE) or install glab on the runner"
+            echo "glab missing: use majordomo-glab job container (MAJORDOMO_FORGE_IMAGE) or install glab on the runner"
             exit 1
-          fi
-
-      - name: Resolve served-repo credential
-        id: cred
-        run: |
-          set -euo pipefail
-          # Match majordomo ResolveCredential: per-repo override, then org/group token.
-          # Org secrets must already be in job env (see GH_TOKEN_* / GITLAB_TOKEN_* above).
-          repo_key=$(echo "${REPO_ID}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
-          owner_key=$(echo "${OWNER}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
-          per_repo_var="MAJORDOMO_CREDENTIAL_${repo_key}"
-          token="${!per_repo_var:-}"
-          if [ -z "${token}" ]; then
-            if [ "${SCM}" = "gitlab" ]; then
-              org_var="GITLAB_TOKEN_${owner_key}"
-            else
-              org_var="GH_TOKEN_${owner_key}"
-            fi
-            token="${!org_var:-}"
-          fi
-          if [ -z "${token}" ]; then
-            echo "No credential for ${REPO_ID} (set MAJORDOMO_CREDENTIAL_${repo_key} or org token for owner ${OWNER})"
-            exit 1
-          fi
-          echo "Resolved credential for ${REPO_ID} (owner=${OWNER})"
-          echo "token=${token}" >> "$GITHUB_OUTPUT"
-
-      - name: Clone served repository
-        env:
-          TOKEN: ${{ steps.cred.outputs.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p served
-          auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-access-token:${TOKEN}@#")
-          git clone --depth 50 "${auth_url}" served/repo
-          git -C served/repo fetch --depth 50 origin "${HEAD_SHA}"
-          git -C served/repo checkout --force "${HEAD_SHA}"
-          git -C served/repo remote set-url origin "${CLONE_URL}"
-          # Ensure origin/<base> exists for prep three-dot diff
-          git -C served/repo fetch --depth 50 origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}" || \
-            git -C served/repo fetch origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
-
-      - name: Checkout merged context branch (optional)
-        env:
-          TOKEN: ${{ steps.cred.outputs.token }}
-        run: |
-          set -euo pipefail
-          CONTEXT_BRANCH="majordomo-context/${REPO_ID}"
-          auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-access-token:${TOKEN}@#")
-          if git ls-remote "${auth_url}" "refs/heads/${CONTEXT_BRANCH}" | grep -q .; then
-            mkdir -p served/context
-            git clone --depth 1 --branch "${CONTEXT_BRANCH}" "${auth_url}" served/context/worktree
-            git -C served/context/worktree remote set-url origin "${CLONE_URL}"
-            echo "MAJORDOMO_CONTEXT_DIR=${{ github.workspace }}/served/context/worktree" >> "$GITHUB_ENV"
-            echo "Checked out merged context branch ${CONTEXT_BRANCH}"
-          else
-            echo "No context branch ${CONTEXT_BRANCH} — prep grounding skipped"
           fi
 
       - name: Restore poll cursor cache
@@ -201,85 +144,35 @@ jobs:
           restore-keys: |
             majordomo-poll-cache-${{ runner.os }}-
 
-      - name: Ensure LLM auth for strop Judge
-        run: |
-          set -euo pipefail
-          if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "No LLM provider secret (set ANTHROPIC_API_KEY or OPENAI_API_KEY)"
-            exit 1
-          fi
-          echo "Judge driver: strop (in-process)"
-
-      - name: Static analysis (from central config)
-        env:
-          MAJORDOMO_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts
-          MAJORDOMO_SA_IMAGE_PREFIX: ${{ vars.MAJORDOMO_SA_IMAGE_PREFIX }}
-          MAJORDOMO_SA_IMAGE_TAG: ${{ vars.MAJORDOMO_SA_IMAGE_TAG }}
-        run: |
-          set -euo pipefail
-          ./majordomo sa \
-            --config-dir majordomo-central-config \
-            --repo-id "${REPO_ID}" \
-            --repo-root "${{ github.workspace }}/served/repo" \
-            --base-branch "${BASE_BRANCH}" \
-            --scripts-dir "${MAJORDOMO_SCRIPTS}" || true
-          echo "SA finished (missing images are non-fatal)"
-
-      - name: Orchestrate review
+      - name: Run review
         env:
           COPILOT_PIPELINE: pr-review
           MAJORDOMO_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts
+          MAJORDOMO_SA_IMAGE_PREFIX: ${{ vars.MAJORDOMO_SA_IMAGE_PREFIX }}
+          MAJORDOMO_SA_IMAGE_TAG: ${{ vars.MAJORDOMO_SA_IMAGE_TAG }}
+          MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
         run: |
           set -euo pipefail
-          STAGING="${{ github.workspace }}/staging/${REPO_ID}-pr-${PR_NUMBER}"
-          OUTPUT="${{ github.workspace }}/review-output/${REPO_ID}/pr-review"
-          mkdir -p "${STAGING}" "${OUTPUT}"
-          ctx_args=()
-          if [ -n "${MAJORDOMO_CONTEXT_DIR:-}" ]; then
-            ctx_args+=(--context-dir "${MAJORDOMO_CONTEXT_DIR}")
-          fi
-          ./majordomo orchestrate \
-            --pr "${PR_NUMBER}" \
-            --base-branch "${BASE_BRANCH}" \
-            --staging-dir "${STAGING}" \
-            --output-dir "${OUTPUT}" \
-            --repo-root "${{ github.workspace }}/served/repo" \
-            --scripts-dir "${MAJORDOMO_SCRIPTS}" \
+          ./majordomo run review \
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
-            --skip-report=false \
-            "${ctx_args[@]}"
-          echo "Orchestrate finished"
-
-      - name: Publish summary (if present)
-        env:
-          MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
-          GITHUB_REPOSITORY: ${{ env.OWNER }}/${{ env.NAME }}
-        run: |
-          set -euo pipefail
-          SUMMARY="${{ github.workspace }}/review-output/${REPO_ID}/pr-review/summary.md"
-          if [ ! -f "${SUMMARY}" ]; then
-            SUMMARY=$(find "${{ github.workspace }}/review-output/${REPO_ID}" -name summary.md | head -n1 || true)
-          fi
-          if [ -z "${SUMMARY}" ] || [ ! -f "${SUMMARY}" ]; then
-            echo "No summary.md — skip publish"
-            exit 0
-          fi
-          # Token comes from job env GH_TOKEN_* / GITLAB_TOKEN_* / MAJORDOMO_CREDENTIAL_* via ResolveCredential.
-          ./majordomo publish --scm "${SCM}" --owner "${OWNER}" --repo "${NAME}" \
-            --repo-id "${REPO_ID}" \
-            "${PR_NUMBER}" "${SUMMARY}" "${PUBLISH_MODE}"
-
-      - name: Update poll cursor
-        run: |
-          set -euo pipefail
-          mkdir -p ".poll-cache/${REPO_ID}"
-          ./majordomo cache poll-set ".poll-cache/${REPO_ID}/poll-cursor.json" \
-            --pr "${PR_NUMBER}" --sha "${HEAD_SHA}"
+            --pr "${PR_NUMBER}" \
+            --head-sha "${HEAD_SHA}" \
+            --base-branch "${BASE_BRANCH}" \
+            --clone-url "${CLONE_URL}" \
+            --workdir "${{ github.workspace }}/served/repo" \
+            --staging-dir "${{ github.workspace }}/staging/${REPO_ID}-pr-${PR_NUMBER}" \
+            --output-dir "${{ github.workspace }}/review-output/${REPO_ID}/pr-review" \
+            --scripts-dir "${MAJORDOMO_SCRIPTS}" \
+            --cursor-dir .poll-cache \
+            --publish
 
       - name: Upload review artifacts
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: review-${{ env.REPO_ID }}-pr-${{ env.PR_NUMBER }}
-          path: review-output/
+          path: |
+            review-output/
+            **/logs/inference-failures/
           if-no-files-found: ignore
