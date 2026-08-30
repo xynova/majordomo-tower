@@ -1,0 +1,177 @@
+# Majordomo context digest — tower cron (same 5m floor as poll).
+# One job per served repo (concurrency context-digest-<repo-id>).
+name: majordomo-context-digest
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_compact:
+        description: "Run chronology compaction even when under threshold"
+        required: false
+        default: "false"
+        type: boolean
+      repo_id:
+        description: "Optional single repo id (default: all digest targets)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Checkout tower (with submodule)
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .majordomo/go.mod
+          cache-dependency-path: .majordomo/go.sum
+
+      - name: Build majordomo
+        run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
+        working-directory: .majordomo
+
+      - name: Plan digest targets
+        id: plan
+        run: |
+          set -euo pipefail
+          ./majordomo context repos \
+            --config-dir majordomo-central-config \
+            --out context-repos.json
+          count=$(jq '.repos | length' context-repos.json)
+          echo "Digest targets: ${count}"
+          if [ "${count}" = "0" ]; then
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          matrix=$(jq -c '{include: .repos}' context-repos.json)
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  digest:
+    needs: plan
+    if: needs.plan.outputs.matrix != '{"include":[]}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    concurrency:
+      group: context-digest-${{ matrix.repo_id }}
+      cancel-in-progress: false
+    env:
+      REPO_ID: ${{ matrix.repo_id }}
+      SCM: ${{ matrix.scm }}
+      OWNER: ${{ matrix.owner }}
+      NAME: ${{ matrix.name }}
+      CLONE_URL: ${{ matrix.clone_url }}
+      GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
+      GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
+      GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
+      BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout tower (with submodule)
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .majordomo/go.mod
+          cache-dependency-path: .majordomo/go.sum
+
+      - name: Build majordomo
+        run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
+        working-directory: .majordomo
+
+      - name: Ensure forge CLI on PATH
+        run: |
+          set -euo pipefail
+          if [ "${SCM}" = "github" ] && ! command -v gh >/dev/null 2>&1; then
+            echo "Installing GitHub CLI (gh) on runner…"
+            (type -p wget >/dev/null || (sudo apt-get update && sudo apt-get install -y wget))
+            sudo mkdir -p -m 755 /etc/apt/keyrings
+            out=$(mktemp)
+            wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+            cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+            sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+              | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt-get update && sudo apt-get install -y gh
+            gh --version
+          fi
+          if [ "${SCM}" = "gitlab" ] && ! command -v glab >/dev/null 2>&1; then
+            echo "glab missing — install glab on the runner or use a majordomo-glab container"
+            exit 1
+          fi
+
+      - name: Clone served repo and run context digest
+        env:
+          MAJORDOMO_REPO_ID: ${{ matrix.repo_id }}
+        run: |
+          set -euo pipefail
+          repo_key=$(echo "${REPO_ID}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
+          owner_key=$(echo "${OWNER}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
+          per_repo_var="MAJORDOMO_CREDENTIAL_${repo_key}"
+          token="${!per_repo_var:-}"
+          if [ -z "${token}" ]; then
+            case "${SCM}" in
+              gitlab)
+                org_var="GITLAB_TOKEN_${owner_key}"
+                token="${!org_var:-}"
+                ;;
+              bitbucket)
+                token="${BITBUCKET_TOKEN:-}"
+                ;;
+              *)
+                org_var="GH_TOKEN_${owner_key}"
+                token="${!org_var:-}"
+                ;;
+            esac
+          fi
+          if [ -z "${token}" ]; then
+            echo "No credential for ${REPO_ID} (set MAJORDOMO_CREDENTIAL_${repo_key} or org token for owner ${OWNER})"
+            exit 1
+          fi
+          echo "Resolved credential for ${REPO_ID} (owner=${OWNER})"
+          case "${SCM}" in
+            gitlab)
+              auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://oauth2:${token}@#")
+              ;;
+            bitbucket)
+              auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-token-auth:${token}@#")
+              ;;
+            *)
+              auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-access-token:${token}@#")
+              ;;
+          esac
+          mkdir -p served
+          git clone --depth 500 "${auth_url}" served/repo
+          git -C served/repo fetch --depth 500 origin
+          git -C served/repo remote set-url origin "${CLONE_URL}"
+          ./majordomo context digest \
+            --config-dir majordomo-central-config \
+            --repo-id "${REPO_ID}" \
+            --workdir "${{ github.workspace }}/served/repo" \
+            $( [ "${{ github.event.inputs.force_compact }}" = "true" ] && echo "--force-compact" ) | tee digest-result.json
+          action=$(jq -r '.action' digest-result.json)
+          echo "Digest action: ${action}"
+
+      - name: Upload digest result
+        uses: actions/upload-artifact@v6
+        with:
+          name: context-digest-${{ matrix.repo_id }}
+          path: digest-result.json
+          if-no-files-found: ignore

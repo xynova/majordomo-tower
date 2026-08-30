@@ -91,6 +91,10 @@ jobs:
       GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
       GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
       GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
+      # LLM auth for embedded Bifrost Account (Judge talks OpenAI loopback only).
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -147,8 +151,6 @@ jobs:
           MAJORDOMO_SA_IMAGE_PREFIX: ${{ vars.MAJORDOMO_SA_IMAGE_PREFIX }}
           MAJORDOMO_SA_IMAGE_TAG: ${{ vars.MAJORDOMO_SA_IMAGE_TAG }}
           MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           ./majordomo run review \
