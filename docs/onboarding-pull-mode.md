@@ -42,7 +42,19 @@ The workflow `secrets.GITHUB_TOKEN` is only for operating on **this tower** (e.g
 4. **Run**
    - **Actions → majordomo-poll → Run workflow** (or wait for the 5-minute cron)
    - Poll writes `pending-reviews.json` and `gh workflow run`s **majordomo-review** per pending change
-   - Review clones the served repo at `head_sha`, runs `majordomo orchestrate`, then `majordomo publish`
+   - Review is `majordomo run review --publish` (clone, SA, orchestrate, publish, poll cursor)
+
+Same job on a laptop (no publish):
+
+```bash
+cd .majordomo && go build -o ../majordomo ./cmd/majordomo && cd ..
+./majordomo run review \
+  --config-dir majordomo-central-config \
+  --repo-id polypus \
+  --pr 123 \
+  --workdir /path/to/polypus \
+  --until prep
+```
 
 5. **Cursor**
    - After a review job, `.poll-cache/<repo_id>/poll-cursor.json` records the head SHA (Actions cache)
@@ -50,7 +62,7 @@ The workflow `secrets.GITHUB_TOKEN` is only for operating on **this tower** (e.g
 
 ## Agent runtime
 
-`orchestrate` invokes OpenCode via `agent-dispatch.sh` (Phase 3 image). On a stock `ubuntu-latest` runner without that image/keys, prep/waves run but agent steps fail until the agent container (or self-hosted runner) has OpenCode + provider credentials.
+`orchestrate` (via `majordomo run review`) uses in-process strop Judge. LLM keys (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`) are required for waves and later stages. `--until prep` needs no LLM.
 
 ## Publish (GitHub / GitLab)
 
