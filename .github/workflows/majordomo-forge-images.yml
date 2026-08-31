@@ -9,12 +9,22 @@ on:
     paths:
       - ".majordomo/dockerfiles/Dockerfile.gh"
       - ".majordomo/dockerfiles/Dockerfile.glab"
+      - ".majordomo/dockerfiles/Dockerfile.cli"
+      - ".majordomo/go.mod"
+      - ".majordomo/go.sum"
+      - ".majordomo/cmd/**"
+      - ".majordomo/internal/**"
       - ".majordomo/pipelines/scripts/**"
       - ".github/workflows/majordomo-forge-images.yml"
   pull_request:
     paths:
       - ".majordomo/dockerfiles/Dockerfile.gh"
       - ".majordomo/dockerfiles/Dockerfile.glab"
+      - ".majordomo/dockerfiles/Dockerfile.cli"
+      - ".majordomo/go.mod"
+      - ".majordomo/go.sum"
+      - ".majordomo/cmd/**"
+      - ".majordomo/internal/**"
       - ".majordomo/pipelines/scripts/**"
       - ".github/workflows/majordomo-forge-images.yml"
 
@@ -39,6 +49,9 @@ jobs:
           - image_name: majordomo-glab
             dockerfile: Dockerfile.glab
             smoke_cmd: glab --version
+          - image_name: majordomo
+            dockerfile: Dockerfile.cli
+            smoke_cmd: ""
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -51,14 +64,16 @@ jobs:
           set -euo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Build forge image
+      - name: Build image
         env:
-          DOCKER_BUILD_TARGET: public
           SKIP_PUSH: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
           REGISTRY_USR: ${{ github.actor }}
           REGISTRY_PSW: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          if [ "${{ matrix.image_name }}" != "majordomo" ]; then
+            export DOCKER_BUILD_TARGET=public
+          fi
           bash .majordomo/pipelines/scripts/tower/build-forge-image.sh \
             "${REGISTRY}" \
             "${{ matrix.image_name }}" \
@@ -66,10 +81,21 @@ jobs:
             "${{ matrix.dockerfile }}"
 
       - name: Smoke forge CLI
+        if: matrix.image_name != 'majordomo'
         run: |
           set -euo pipefail
           docker run --rm "${REGISTRY}/${{ matrix.image_name }}:${{ github.sha }}" \
             sh -c '${{ matrix.smoke_cmd }} && echo OK'
+
+      - name: Smoke majordomo CLI
+        if: matrix.image_name == 'majordomo'
+        run: |
+          set -euo pipefail
+          docker run --rm "${REGISTRY}/${{ matrix.image_name }}:${{ github.sha }}" --help >/dev/null
+          bash .majordomo/pipelines/scripts/tower/extract-majordomo-cli.sh \
+            "${REGISTRY}/${{ matrix.image_name }}:${{ github.sha }}" \
+            "${{ github.workspace }}/majordomo-from-image"
+          echo OK
 
       - name: Tag and push latest (default branch)
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
