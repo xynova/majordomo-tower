@@ -138,4 +138,7 @@ jobs:
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
             --workdir "${PWD}/served/repo" \
-            ${extra} | tee digest-result.json
+            --out digest-result.json \
+            ${extra}
+          action=$(jq -r '.action' digest-result.json)
+          echo "Digest action: ${action}"

@@ -133,7 +133,8 @@ jobs:
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
             --workdir "${PWD}/served/repo" \
-            $( [ "${{ github.event.inputs.force_compact }}" = "true" ] && echo "--force-compact" ) | tee digest-result.json
+            --out digest-result.json \
+            $( [ "${{ github.event.inputs.force_compact }}" = "true" ] && echo "--force-compact" )
           action=$(jq -r '.action' digest-result.json)
           echo "Digest action: ${action}"
 
