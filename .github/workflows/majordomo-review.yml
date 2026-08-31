@@ -102,7 +102,7 @@ jobs:
           cache-dependency-path: .majordomo/go.sum
 
       - name: Build majordomo
-        run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
+        run: go build -buildvcs=false -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
         working-directory: .majordomo
 
       - name: Verify forge CLI on PATH

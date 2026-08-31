@@ -28,7 +28,7 @@ jobs:
 
       - name: Build majordomo
         run: |
-          go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
+          go build -buildvcs=false -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
         working-directory: .majordomo
 
       - name: Restore poll cursor cache
