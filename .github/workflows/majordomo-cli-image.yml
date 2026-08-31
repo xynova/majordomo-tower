@@ -1,0 +1,84 @@
+# Build and push majordomo CLI image to tower GHCR (binary at /majordomo).
+# Canonical workflow shape: .majordomo/pipelines/github-actions/tower/majordomo-cli-image.yml
+name: majordomo-cli-image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - ".majordomo/dockerfiles/Dockerfile.cli"
+      - ".majordomo/go.mod"
+      - ".majordomo/go.sum"
+      - ".majordomo/cmd/**"
+      - ".majordomo/internal/**"
+      - ".majordomo/pipelines/scripts/build-copilot-image.sh"
+      - ".majordomo/pipelines/scripts/tower/extract-majordomo-cli.sh"
+      - ".github/workflows/majordomo-cli-image.yml"
+  pull_request:
+    paths:
+      - ".majordomo/dockerfiles/Dockerfile.cli"
+      - ".majordomo/go.mod"
+      - ".majordomo/go.sum"
+      - ".majordomo/cmd/**"
+      - ".majordomo/internal/**"
+      - ".majordomo/pipelines/scripts/build-copilot-image.sh"
+      - ".majordomo/pipelines/scripts/tower/extract-majordomo-cli.sh"
+      - ".github/workflows/majordomo-cli-image.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/xynova/majordomo-tower
+  IMAGE_NAME: majordomo
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout tower (with submodule)
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build majordomo CLI image
+        env:
+          SKIP_PUSH: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
+          REGISTRY_USR: ${{ github.actor }}
+          REGISTRY_PSW: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bash .majordomo/pipelines/scripts/tower/build-forge-image.sh \
+            "${REGISTRY}" \
+            "${IMAGE_NAME}" \
+            "${{ github.sha }}" \
+            "Dockerfile.cli"
+
+      - name: Smoke majordomo CLI
+        run: |
+          set -euo pipefail
+          docker run --rm "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}" --help >/dev/null
+          bash .majordomo/pipelines/scripts/tower/extract-majordomo-cli.sh \
+            "${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}" \
+            "${{ github.workspace }}/majordomo-from-image"
+          "${{ github.workspace }}/majordomo-from-image" --help >/dev/null
+          echo OK
+
+      - name: Tag and push latest (default branch)
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          set -euo pipefail
+          src="${REGISTRY}/${IMAGE_NAME}:${{ github.sha }}"
+          latest="${REGISTRY}/${IMAGE_NAME}:latest"
+          docker tag "${src}" "${latest}"
+          docker push "${latest}"
+          echo "Pushed ${latest}"

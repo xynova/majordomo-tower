@@ -1,5 +1,5 @@
 # Majordomo poll — reconciliation (GitHub Actions cron floor: 5 minutes).
-# Builds Go CLI from .majordomo submodule and queues review workflows for new PR heads.
+# Extracts majordomo CLI from MAJORDOMO_IMAGE and queues review workflows for new PR heads.
 name: majordomo-poll
 
 on:
@@ -10,26 +10,27 @@ on:
 permissions:
   contents: read
   actions: write
+  packages: read
 
 jobs:
   poll:
     runs-on: ubuntu-latest
+    env:
+      MAJORDOMO_IMAGE: ${{ vars.MAJORDOMO_IMAGE }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: .majordomo/go.mod
-          cache-dependency-path: .majordomo/go.sum
-
-      - name: Build majordomo
+      - name: Log in to GHCR
         run: |
-          go build -buildvcs=false -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
-        working-directory: .majordomo
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Extract majordomo CLI from image
+        run: bash "${TOWER_SCRIPTS}/extract-majordomo-cli.sh" "${MAJORDOMO_IMAGE}" "${{ github.workspace }}/majordomo"
 
       - name: Restore poll cursor cache
         uses: actions/cache@v5

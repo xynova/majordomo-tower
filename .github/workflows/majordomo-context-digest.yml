@@ -16,6 +16,10 @@ on:
         description: "Optional single repo id (default: all digest targets)"
         required: false
         type: string
+      majordomo_image:
+        description: "Optional majordomo CLI image override (default: vars.MAJORDOMO_IMAGE)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -30,6 +34,7 @@ jobs:
     env:
       MAJORDOMO_GH_IMAGE: ${{ vars.MAJORDOMO_GH_IMAGE }}
       MAJORDOMO_GLAB_IMAGE: ${{ vars.MAJORDOMO_GLAB_IMAGE }}
+      MAJORDOMO_IMAGE: ${{ github.event.inputs.majordomo_image || vars.MAJORDOMO_IMAGE }}
       TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
@@ -37,15 +42,13 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: .majordomo/go.mod
-          cache-dependency-path: .majordomo/go.sum
+      - name: Log in to GHCR
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Build majordomo
-        run: go build -buildvcs=false -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
-        working-directory: .majordomo
+      - name: Extract majordomo CLI from image
+        run: bash "${TOWER_SCRIPTS}/extract-majordomo-cli.sh" "${MAJORDOMO_IMAGE}" "${{ github.workspace }}/majordomo"
 
       - name: Plan digest targets
         id: plan
@@ -63,12 +66,22 @@ jobs:
           matrix=$(bash "${TOWER_SCRIPTS}/enrich-context-repos-matrix.sh" context-repos.json)
           echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
+      - name: Upload majordomo CLI
+        uses: actions/upload-artifact@v6
+        with:
+          name: majordomo-cli
+          path: majordomo
+          if-no-files-found: error
+
   digest:
     needs: plan
     if: needs.plan.outputs.matrix != '{"include":[]}'
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.forge_image }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
@@ -94,15 +107,14 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Download majordomo CLI
+        uses: actions/download-artifact@v6
         with:
-          go-version-file: .majordomo/go.mod
-          cache-dependency-path: .majordomo/go.sum
+          name: majordomo-cli
+          path: ${{ github.workspace }}
 
-      - name: Build majordomo
-        run: go build -buildvcs=false -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
-        working-directory: .majordomo
+      - name: Make majordomo executable
+        run: chmod +x "${{ github.workspace }}/majordomo"
 
       - name: Verify forge CLI on PATH
         run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"

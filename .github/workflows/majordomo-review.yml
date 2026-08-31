@@ -65,10 +65,40 @@ permissions:
   statuses: write
 
 jobs:
+  prepare-cli:
+    runs-on: ubuntu-latest
+    env:
+      MAJORDOMO_IMAGE: ${{ vars.MAJORDOMO_IMAGE }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
+    steps:
+      - name: Checkout tower (with submodule)
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Log in to GHCR
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Extract majordomo CLI from image
+        run: bash "${TOWER_SCRIPTS}/extract-majordomo-cli.sh" "${MAJORDOMO_IMAGE}" "${{ github.workspace }}/majordomo"
+
+      - name: Upload majordomo CLI
+        uses: actions/upload-artifact@v6
+        with:
+          name: majordomo-cli
+          path: majordomo
+          if-no-files-found: error
+
   review:
+    needs: prepare-cli
     runs-on: ubuntu-latest
     container:
       image: ${{ github.event.client_payload.forge_image || inputs.forge_image || ((github.event.client_payload.scm || inputs.scm || 'github') == 'gitlab' && vars.MAJORDOMO_GLAB_IMAGE) || ((github.event.client_payload.scm || inputs.scm || 'github') == 'github' && vars.MAJORDOMO_GH_IMAGE) || '' }}
+    defaults:
+      run:
+        shell: bash
     env:
       REPO_ID: ${{ github.event.client_payload.repo_id || inputs.repo_id }}
       REVIEW_ID: ${{ github.event.client_payload.review_id || inputs.review_id }}
@@ -95,15 +125,14 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Download majordomo CLI
+        uses: actions/download-artifact@v6
         with:
-          go-version-file: .majordomo/go.mod
-          cache-dependency-path: .majordomo/go.sum
+          name: majordomo-cli
+          path: ${{ github.workspace }}
 
-      - name: Build majordomo
-        run: go build -buildvcs=false -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
-        working-directory: .majordomo
+      - name: Make majordomo executable
+        run: chmod +x "${{ github.workspace }}/majordomo"
 
       - name: Verify forge CLI on PATH
         if: env.SCM == 'github' || env.SCM == 'gitlab'
