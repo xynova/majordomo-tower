@@ -1,11 +1,5 @@
 # Majordomo review job — invoked by poll or repository_dispatch (push modes).
-#
-# Forge job containers (recommended for github|gitlab publish):
-#   Set repository variable MAJORDOMO_FORGE_IMAGE to your registry tag, e.g.
-#     ghcr.io/org/majordomo-gh:<sha>   or   …/majordomo-glab:<sha>
-#   Or pass forge_image via workflow_dispatch / client_payload.
-#   Then uncomment the `container:` block below (empty image names fail the job).
-# Majordomo Go binary is built in-job into the workspace; it shells to gh/glab on PATH.
+# Canonical workflow shape: .majordomo/pipelines/github-actions/tower/majordomo-review.yml
 name: majordomo-review
 
 on:
@@ -56,7 +50,7 @@ on:
         required: false
         type: string
       forge_image:
-        description: Optional majordomo-gh / majordomo-glab image (document in job container)
+        description: Optional majordomo-gh / majordomo-glab image override
         required: false
         type: string
 
@@ -66,15 +60,15 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
   pull-requests: write
   statuses: write
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Uncomment when MAJORDOMO_FORGE_IMAGE or forge_image is always set for this tower:
-    # container:
-    #   image: ${{ github.event.client_payload.forge_image || inputs.forge_image || vars.MAJORDOMO_FORGE_IMAGE }}
+    container:
+      image: ${{ github.event.client_payload.forge_image || inputs.forge_image || ((github.event.client_payload.scm || inputs.scm || 'github') == 'gitlab' && vars.MAJORDOMO_GLAB_IMAGE) || ((github.event.client_payload.scm || inputs.scm || 'github') == 'github' && vars.MAJORDOMO_GH_IMAGE) || '' }}
     env:
       REPO_ID: ${{ github.event.client_payload.repo_id || inputs.repo_id }}
       REVIEW_ID: ${{ github.event.client_payload.review_id || inputs.review_id }}
@@ -86,7 +80,6 @@ jobs:
       PUBLISH_MODE: ${{ github.event.client_payload.publish_mode || inputs.publish_mode || 'auto' }}
       OWNER: ${{ github.event.client_payload.owner || inputs.owner }}
       NAME: ${{ github.event.client_payload.name || inputs.name }}
-      FORGE_IMAGE: ${{ github.event.client_payload.forge_image || inputs.forge_image || vars.MAJORDOMO_FORGE_IMAGE }}
       # Served-repo org tokens (add rows when onboarding a new org/group).
       GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
       GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
@@ -95,6 +88,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -111,30 +105,9 @@ jobs:
         run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
         working-directory: .majordomo
 
-      - name: Ensure forge CLI on PATH (host runner fallback)
+      - name: Verify forge CLI on PATH
         if: env.SCM == 'github' || env.SCM == 'gitlab'
-        run: |
-          set -euo pipefail
-          if [ -n "${FORGE_IMAGE:-}" ]; then
-            echo "FORGE_IMAGE=${FORGE_IMAGE}: prefer running this job with container.image set to that tag"
-          fi
-          if [ "${SCM}" = "github" ] && ! command -v gh >/dev/null 2>&1; then
-            echo "Installing GitHub CLI (gh) on runner"
-            (type -p wget >/dev/null || (sudo apt-get update && sudo apt-get install -y wget))
-            sudo mkdir -p -m 755 /etc/apt/keyrings
-            out=$(mktemp)
-            wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
-            cat "$out" | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
-            sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-              | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-            sudo apt-get update && sudo apt-get install -y gh
-            gh --version
-          fi
-          if [ "${SCM}" = "gitlab" ] && ! command -v glab >/dev/null 2>&1; then
-            echo "glab missing: use majordomo-glab job container (MAJORDOMO_FORGE_IMAGE) or install glab on the runner"
-            exit 1
-          fi
+        run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
 
       - name: Restore poll cursor cache
         uses: actions/cache@v5
