@@ -66,15 +66,15 @@ cd .majordomo && go build -o ../majordomo ./cmd/majordomo && cd ..
 
 ## Publish (GitHub / GitLab)
 
-`majordomo publish` and context digest shell to **`gh`** or **`glab`** on PATH (not raw HTTP). Tower jobs run inside forge CLI containers from GHCR:
+`majordomo publish` and context digest shell to **`gh`** or **`glab`** on PATH (not raw HTTP). Majordomo defines the workflow shape and shared scripts under `.majordomo/pipelines/github-actions/tower/` and `.majordomo/pipelines/scripts/tower/`; this tower implements them in `.github/workflows/`.
 
-1. Dispatch (or merge) [`.github/workflows/majordomo-forge-images.yml`](../.github/workflows/majordomo-forge-images.yml). It builds `.majordomo/dockerfiles/Dockerfile.gh` / `Dockerfile.glab` and pushes:
+1. Dispatch (or merge) [`.github/workflows/majordomo-forge-images.yml`](../.github/workflows/majordomo-forge-images.yml) (canonical source: `.majordomo/pipelines/github-actions/tower/majordomo-forge-images.yml`). It builds `.majordomo/dockerfiles/Dockerfile.gh` / `Dockerfile.glab` and pushes:
    - `ghcr.io/xynova/majordomo-tower/majordomo-gh:<sha>` (+ `:latest` on `main`)
    - `ghcr.io/xynova/majordomo-tower/majordomo-glab:<sha>` (+ `:latest` on `main`)
 2. Set tower repository variables:
    - `MAJORDOMO_GH_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-gh:latest`
    - `MAJORDOMO_GLAB_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-glab:latest`
-3. Review, context-digest, and context-gate select the image by `scm` (optional `forge_image` override on review). Each job builds `./majordomo` in the workspace inside that container.
+3. Review, context-digest, and context-gate select the image by `scm` (optional `forge_image` override on review). Each job builds `./majordomo` in the workspace inside that container. When bumping `.majordomo`, diff tower workflows against `.majordomo/pipelines/github-actions/tower/`.
 
 Bitbucket publish stays HTTP (no forge container in v1).
 

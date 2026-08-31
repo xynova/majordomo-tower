@@ -1,9 +1,5 @@
 # Majordomo context digest — tower cron (same 5m floor as poll).
-# One job per served repo (concurrency context-digest-<repo-id>).
-#
-# Forge job containers: plan injects forge_image from MAJORDOMO_GH_IMAGE /
-# MAJORDOMO_GLAB_IMAGE by scm. Digest jobs run inside that image so gh/glab
-# are on PATH. Publish images via majordomo-forge-images.yml.
+# Canonical workflow shape: .majordomo/pipelines/github-actions/tower/majordomo-context-digest.yml
 name: majordomo-context-digest
 
 on:
@@ -34,6 +30,7 @@ jobs:
     env:
       MAJORDOMO_GH_IMAGE: ${{ vars.MAJORDOMO_GH_IMAGE }}
       MAJORDOMO_GLAB_IMAGE: ${{ vars.MAJORDOMO_GLAB_IMAGE }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -63,27 +60,7 @@ jobs:
             echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          jq -c --arg gh "${MAJORDOMO_GH_IMAGE:-}" --arg glab "${MAJORDOMO_GLAB_IMAGE:-}" '
-            .repos |= map(
-              . + {
-                forge_image: (
-                  if .scm == "gitlab" then $glab
-                  elif .scm == "github" then $gh
-                  else ""
-                  end
-                )
-              }
-            )
-          ' context-repos.json > context-repos-enriched.json
-          missing=$(jq -r '
-            [.repos[] | select(.scm == "github" or .scm == "gitlab") | select(.forge_image == "")] | length
-          ' context-repos-enriched.json)
-          if [ "${missing}" != "0" ]; then
-            echo "Missing MAJORDOMO_GH_IMAGE / MAJORDOMO_GLAB_IMAGE for github|gitlab digest targets"
-            echo "Set repo vars after majordomo-forge-images publishes to ghcr.io/xynova/majordomo-tower"
-            exit 1
-          fi
-          matrix=$(jq -c '{include: .repos}' context-repos-enriched.json)
+          matrix=$(bash "${TOWER_SCRIPTS}/enrich-context-repos-matrix.sh" context-repos.json)
           echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
   digest:
@@ -110,6 +87,7 @@ jobs:
       BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -127,66 +105,14 @@ jobs:
         working-directory: .majordomo
 
       - name: Verify forge CLI on PATH
-        run: |
-          set -euo pipefail
-          case "${SCM}" in
-            github)
-              command -v gh >/dev/null 2>&1 || { echo "gh missing in forge container ${{ matrix.forge_image }}"; exit 1; }
-              gh --version
-              ;;
-            gitlab)
-              command -v glab >/dev/null 2>&1 || { echo "glab missing in forge container ${{ matrix.forge_image }}"; exit 1; }
-              glab --version
-              ;;
-            *)
-              echo "SCM=${SCM}: no forge CLI required"
-              ;;
-          esac
+        run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
 
       - name: Clone served repo and run context digest
         env:
           MAJORDOMO_REPO_ID: ${{ matrix.repo_id }}
         run: |
           set -euo pipefail
-          repo_key=$(echo "${REPO_ID}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
-          owner_key=$(echo "${OWNER}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
-          per_repo_var="MAJORDOMO_CREDENTIAL_${repo_key}"
-          token="${!per_repo_var:-}"
-          if [ -z "${token}" ]; then
-            case "${SCM}" in
-              gitlab)
-                org_var="GITLAB_TOKEN_${owner_key}"
-                token="${!org_var:-}"
-                ;;
-              bitbucket)
-                token="${BITBUCKET_TOKEN:-}"
-                ;;
-              *)
-                org_var="GH_TOKEN_${owner_key}"
-                token="${!org_var:-}"
-                ;;
-            esac
-          fi
-          if [ -z "${token}" ]; then
-            echo "No credential for ${REPO_ID} (set MAJORDOMO_CREDENTIAL_${repo_key} or org token for owner ${OWNER})"
-            exit 1
-          fi
-          echo "Resolved credential for ${REPO_ID} (owner=${OWNER})"
-          case "${SCM}" in
-            gitlab)
-              auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://oauth2:${token}@#")
-              ;;
-            bitbucket)
-              auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-token-auth:${token}@#")
-              ;;
-            *)
-              auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-access-token:${token}@#")
-              ;;
-          esac
-          mkdir -p served
-          git clone --depth 500 "${auth_url}" served/repo
-          git -C served/repo fetch --depth 500 origin
-          git -C served/repo remote set-url origin "${CLONE_URL}"
+          bash "${TOWER_SCRIPTS}/clone-served-repo.sh" served/repo
           ./majordomo context digest \
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \

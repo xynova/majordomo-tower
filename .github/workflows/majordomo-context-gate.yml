@@ -1,7 +1,5 @@
 # Faster context gate regen — trigger digest for one served repo without waiting for cron.
-#
-# resolve picks scm + forge_image (MAJORDOMO_GH_IMAGE / MAJORDOMO_GLAB_IMAGE);
-# digest runs inside that container so gh/glab are on PATH.
+# Canonical workflow shape: .majordomo/pipelines/github-actions/tower/majordomo-context-gate.yml
 name: majordomo-context-gate
 
 on:
@@ -37,6 +35,7 @@ jobs:
       REPO_ID: ${{ github.event.client_payload.repo_id || github.event.inputs.repo_id }}
       MAJORDOMO_GH_IMAGE: ${{ vars.MAJORDOMO_GH_IMAGE }}
       MAJORDOMO_GLAB_IMAGE: ${{ vars.MAJORDOMO_GLAB_IMAGE }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -68,23 +67,7 @@ jobs:
           echo "owner=$(jq -r '.owner' <<<"${row}")" >> "$GITHUB_OUTPUT"
           echo "name=$(jq -r '.name' <<<"${row}")" >> "$GITHUB_OUTPUT"
           echo "clone_url=$(jq -r '.clone_url' <<<"${row}")" >> "$GITHUB_OUTPUT"
-          case "${scm}" in
-            gitlab)
-              img="${MAJORDOMO_GLAB_IMAGE:-}"
-              ;;
-            github)
-              img="${MAJORDOMO_GH_IMAGE:-}"
-              ;;
-            *)
-              img=""
-              ;;
-          esac
-          if [ "${scm}" = "github" ] || [ "${scm}" = "gitlab" ]; then
-            if [ -z "${img}" ]; then
-              echo "Missing forge image var for scm=${scm} (set MAJORDOMO_GH_IMAGE / MAJORDOMO_GLAB_IMAGE)"
-              exit 1
-            fi
-          fi
+          img=$(bash "${TOWER_SCRIPTS}/resolve-forge-image.sh" "${scm}")
           echo "forge_image=${img}" >> "$GITHUB_OUTPUT"
 
   digest:
@@ -108,6 +91,7 @@ jobs:
       BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -125,59 +109,14 @@ jobs:
         working-directory: .majordomo
 
       - name: Verify forge CLI on PATH
-        run: |
-          set -euo pipefail
-          case "${SCM}" in
-            github)
-              command -v gh >/dev/null 2>&1 || { echo "gh missing in forge container"; exit 1; }
-              gh --version
-              ;;
-            gitlab)
-              command -v glab >/dev/null 2>&1 || { echo "glab missing in forge container"; exit 1; }
-              glab --version
-              ;;
-            *)
-              echo "SCM=${SCM}: no forge CLI required"
-              ;;
-          esac
+        run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
 
       - name: Run context digest (gate acceleration)
         env:
           MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
         run: |
           set -euo pipefail
-          repo_key=$(echo "${REPO_ID}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
-          owner_key=$(echo "${OWNER}" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
-          per_repo_var="MAJORDOMO_CREDENTIAL_${repo_key}"
-          token="${!per_repo_var:-}"
-          if [ -z "${token}" ]; then
-            case "${SCM}" in
-              gitlab)
-                org_var="GITLAB_TOKEN_${owner_key}"
-                token="${!org_var:-}"
-                ;;
-              bitbucket)
-                token="${BITBUCKET_TOKEN:-}"
-                ;;
-              *)
-                org_var="GH_TOKEN_${owner_key}"
-                token="${!org_var:-}"
-                ;;
-            esac
-          fi
-          if [ -z "${token}" ]; then
-            echo "No credential for ${REPO_ID}"
-            exit 1
-          fi
-          case "${SCM}" in
-            gitlab) auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://oauth2:${token}@#") ;;
-            bitbucket) auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-token-auth:${token}@#") ;;
-            *) auth_url=$(echo "${CLONE_URL}" | sed "s#https://#https://x-access-token:${token}@#") ;;
-          esac
-          mkdir -p served
-          git clone --depth 500 "${auth_url}" served/repo
-          git -C served/repo fetch --depth 500 origin
-          git -C served/repo remote set-url origin "${CLONE_URL}"
+          bash "${TOWER_SCRIPTS}/clone-served-repo.sh" served/repo
           extra=""
           if [ "${FORCE_COMPACT}" = "true" ]; then extra="--force-compact"; fi
           ./majordomo context digest \

@@ -1,5 +1,5 @@
 # Build and push majordomo-gh / majordomo-glab to tower GHCR.
-# Source Dockerfiles live in the .majordomo submodule.
+# Canonical workflow shape: .majordomo/pipelines/github-actions/tower/majordomo-forge-images.yml
 name: majordomo-forge-images
 
 on:
@@ -9,13 +9,13 @@ on:
     paths:
       - ".majordomo/dockerfiles/Dockerfile.gh"
       - ".majordomo/dockerfiles/Dockerfile.glab"
-      - ".majordomo/pipelines/scripts/build-copilot-image.sh"
+      - ".majordomo/pipelines/scripts/**"
       - ".github/workflows/majordomo-forge-images.yml"
   pull_request:
     paths:
       - ".majordomo/dockerfiles/Dockerfile.gh"
       - ".majordomo/dockerfiles/Dockerfile.glab"
-      - ".majordomo/pipelines/scripts/build-copilot-image.sh"
+      - ".majordomo/pipelines/scripts/**"
       - ".github/workflows/majordomo-forge-images.yml"
 
 permissions:
@@ -34,10 +34,10 @@ jobs:
       matrix:
         include:
           - image_name: majordomo-gh
-            dockerfile: dockerfiles/Dockerfile.gh
+            dockerfile: Dockerfile.gh
             smoke_cmd: gh --version
           - image_name: majordomo-glab
-            dockerfile: dockerfiles/Dockerfile.glab
+            dockerfile: Dockerfile.glab
             smoke_cmd: glab --version
     steps:
       - name: Checkout tower (with submodule)
@@ -52,7 +52,6 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build forge image
-        working-directory: .majordomo
         env:
           DOCKER_BUILD_TARGET: public
           SKIP_PUSH: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
@@ -60,11 +59,10 @@ jobs:
           REGISTRY_PSW: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tag="${{ github.sha }}"
-          bash ./pipelines/scripts/build-copilot-image.sh \
+          bash .majordomo/pipelines/scripts/tower/build-forge-image.sh \
             "${REGISTRY}" \
             "${{ matrix.image_name }}" \
-            "${tag}" \
+            "${{ github.sha }}" \
             "${{ matrix.dockerfile }}"
 
       - name: Smoke forge CLI

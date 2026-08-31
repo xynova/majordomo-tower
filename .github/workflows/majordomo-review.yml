@@ -1,12 +1,5 @@
 # Majordomo review job — invoked by poll or repository_dispatch (push modes).
-#
-# Forge job containers (github|gitlab):
-#   Set MAJORDOMO_GH_IMAGE / MAJORDOMO_GLAB_IMAGE to tower GHCR tags, e.g.
-#     ghcr.io/xynova/majordomo-tower/majordomo-gh:latest
-#     ghcr.io/xynova/majordomo-tower/majordomo-glab:latest
-#   Build/push via majordomo-forge-images.yml. Optional forge_image override
-#   via workflow_dispatch / client_payload.
-# Majordomo Go binary is built in-job into the workspace; it shells to gh/glab on PATH.
+# Canonical workflow shape: .majordomo/pipelines/github-actions/tower/majordomo-review.yml
 name: majordomo-review
 
 on:
@@ -95,6 +88,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
+      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -113,18 +107,7 @@ jobs:
 
       - name: Verify forge CLI on PATH
         if: env.SCM == 'github' || env.SCM == 'gitlab'
-        run: |
-          set -euo pipefail
-          case "${SCM}" in
-            github)
-              command -v gh >/dev/null 2>&1 || { echo "gh missing in forge container; set MAJORDOMO_GH_IMAGE"; exit 1; }
-              gh --version
-              ;;
-            gitlab)
-              command -v glab >/dev/null 2>&1 || { echo "glab missing in forge container; set MAJORDOMO_GLAB_IMAGE"; exit 1; }
-              glab --version
-              ;;
-          esac
+        run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
 
       - name: Restore poll cursor cache
         uses: actions/cache@v5
