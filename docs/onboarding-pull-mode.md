@@ -66,13 +66,17 @@ cd .majordomo && go build -o ../majordomo ./cmd/majordomo && cd ..
 
 ## Publish (GitHub / GitLab)
 
-`majordomo publish` shells to **`gh`** or **`glab`** on PATH (not raw HTTP). Preferred model:
+`majordomo publish` and context digest shell to **`gh`** or **`glab`** on PATH (not raw HTTP). Tower jobs run inside forge CLI containers from GHCR:
 
-1. Build/push `majordomo-gh` / `majordomo-glab` from the majordomo repo (`dockerfiles/Dockerfile.gh`, `Dockerfile.glab`).
-2. Set tower variable `MAJORDOMO_FORGE_IMAGE` (or pass `forge_image`) to that tag and enable the `container:` block in `majordomo-review.yml`.
-3. Job builds `./majordomo` in the workspace inside that container; publish uses the forge CLI already on PATH.
+1. Dispatch (or merge) [`.github/workflows/majordomo-forge-images.yml`](../.github/workflows/majordomo-forge-images.yml). It builds `.majordomo/dockerfiles/Dockerfile.gh` / `Dockerfile.glab` and pushes:
+   - `ghcr.io/xynova/majordomo-tower/majordomo-gh:<sha>` (+ `:latest` on `main`)
+   - `ghcr.io/xynova/majordomo-tower/majordomo-glab:<sha>` (+ `:latest` on `main`)
+2. Set tower repository variables:
+   - `MAJORDOMO_GH_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-gh:latest`
+   - `MAJORDOMO_GLAB_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-glab:latest`
+3. Review, context-digest, and context-gate select the image by `scm` (optional `forge_image` override on review). Each job builds `./majordomo` in the workspace inside that container.
 
-Until the forge image is wired, the review workflow installs `gh` on `ubuntu-latest` for GitHub. GitLab publish requires `glab` (use the `majordomo-glab` job container). Bitbucket publish stays HTTP.
+Bitbucket publish stays HTTP (no forge container in v1).
 
 ## Layout reminder
 
@@ -86,5 +90,8 @@ majordomo-tower/
 │   └── <repo_id>.yaml
 └── .github/workflows/
     ├── majordomo-poll.yml
-    └── majordomo-review.yml
+    ├── majordomo-review.yml
+    ├── majordomo-context-digest.yml
+    ├── majordomo-context-gate.yml
+    └── majordomo-forge-images.yml
 ```

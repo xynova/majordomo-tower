@@ -1,4 +1,7 @@
 # Faster context gate regen — trigger digest for one served repo without waiting for cron.
+#
+# resolve picks scm + forge_image (MAJORDOMO_GH_IMAGE / MAJORDOMO_GLAB_IMAGE);
+# digest runs inside that container so gh/glab are on PATH.
 name: majordomo-context-gate
 
 on:
@@ -18,23 +21,22 @@ on:
 
 permissions:
   contents: read
+  packages: read
   pull-requests: write
 
 jobs:
-  digest:
+  resolve:
     runs-on: ubuntu-latest
-    concurrency:
-      group: context-digest-${{ github.event.client_payload.repo_id || github.event.inputs.repo_id }}
-      cancel-in-progress: false
+    outputs:
+      scm: ${{ steps.meta.outputs.scm }}
+      owner: ${{ steps.meta.outputs.owner }}
+      name: ${{ steps.meta.outputs.name }}
+      clone_url: ${{ steps.meta.outputs.clone_url }}
+      forge_image: ${{ steps.meta.outputs.forge_image }}
     env:
       REPO_ID: ${{ github.event.client_payload.repo_id || github.event.inputs.repo_id }}
-      FORCE_COMPACT: ${{ github.event.client_payload.force_compact || github.event.inputs.force_compact }}
-      GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
-      GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
-      GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
-      BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      MAJORDOMO_GH_IMAGE: ${{ vars.MAJORDOMO_GH_IMAGE }}
+      MAJORDOMO_GLAB_IMAGE: ${{ vars.MAJORDOMO_GLAB_IMAGE }}
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -61,17 +63,86 @@ jobs:
             echo "Unknown repo_id: ${REPO_ID}"
             exit 1
           fi
-          echo "scm=$(jq -r '.scm' <<<"${row}")" >> "$GITHUB_OUTPUT"
+          scm=$(jq -r '.scm' <<<"${row}")
+          echo "scm=${scm}" >> "$GITHUB_OUTPUT"
           echo "owner=$(jq -r '.owner' <<<"${row}")" >> "$GITHUB_OUTPUT"
           echo "name=$(jq -r '.name' <<<"${row}")" >> "$GITHUB_OUTPUT"
           echo "clone_url=$(jq -r '.clone_url' <<<"${row}")" >> "$GITHUB_OUTPUT"
+          case "${scm}" in
+            gitlab)
+              img="${MAJORDOMO_GLAB_IMAGE:-}"
+              ;;
+            github)
+              img="${MAJORDOMO_GH_IMAGE:-}"
+              ;;
+            *)
+              img=""
+              ;;
+          esac
+          if [ "${scm}" = "github" ] || [ "${scm}" = "gitlab" ]; then
+            if [ -z "${img}" ]; then
+              echo "Missing forge image var for scm=${scm} (set MAJORDOMO_GH_IMAGE / MAJORDOMO_GLAB_IMAGE)"
+              exit 1
+            fi
+          fi
+          echo "forge_image=${img}" >> "$GITHUB_OUTPUT"
+
+  digest:
+    needs: resolve
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.resolve.outputs.forge_image }}
+    concurrency:
+      group: context-digest-${{ github.event.client_payload.repo_id || github.event.inputs.repo_id }}
+      cancel-in-progress: false
+    env:
+      REPO_ID: ${{ github.event.client_payload.repo_id || github.event.inputs.repo_id }}
+      FORCE_COMPACT: ${{ github.event.client_payload.force_compact || github.event.inputs.force_compact }}
+      SCM: ${{ needs.resolve.outputs.scm }}
+      OWNER: ${{ needs.resolve.outputs.owner }}
+      NAME: ${{ needs.resolve.outputs.name }}
+      CLONE_URL: ${{ needs.resolve.outputs.clone_url }}
+      GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
+      GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
+      GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
+      BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout tower (with submodule)
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .majordomo/go.mod
+          cache-dependency-path: .majordomo/go.sum
+
+      - name: Build majordomo
+        run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
+        working-directory: .majordomo
+
+      - name: Verify forge CLI on PATH
+        run: |
+          set -euo pipefail
+          case "${SCM}" in
+            github)
+              command -v gh >/dev/null 2>&1 || { echo "gh missing in forge container"; exit 1; }
+              gh --version
+              ;;
+            gitlab)
+              command -v glab >/dev/null 2>&1 || { echo "glab missing in forge container"; exit 1; }
+              glab --version
+              ;;
+            *)
+              echo "SCM=${SCM}: no forge CLI required"
+              ;;
+          esac
 
       - name: Run context digest (gate acceleration)
         env:
-          SCM: ${{ steps.meta.outputs.scm }}
-          OWNER: ${{ steps.meta.outputs.owner }}
-          NAME: ${{ steps.meta.outputs.name }}
-          CLONE_URL: ${{ steps.meta.outputs.clone_url }}
           MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
         run: |
           set -euo pipefail
