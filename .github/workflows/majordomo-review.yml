@@ -118,7 +118,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
-      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
+      TOWER_SCRIPTS: .majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -129,10 +129,13 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           name: majordomo-cli
-          path: ${{ github.workspace }}
+          path: .
 
       - name: Make majordomo executable
-        run: chmod +x "${{ github.workspace }}/majordomo"
+        run: |
+          set -euo pipefail
+          chmod +x ./majordomo
+          test -x ./majordomo
 
       - name: Verify forge CLI on PATH
         if: env.SCM == 'github' || env.SCM == 'gitlab'
@@ -149,7 +152,7 @@ jobs:
       - name: Run review
         env:
           COPILOT_PIPELINE: pr-review
-          MAJORDOMO_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts
+          MAJORDOMO_SCRIPTS: .majordomo/pipelines/scripts
           MAJORDOMO_SA_IMAGE_PREFIX: ${{ vars.MAJORDOMO_SA_IMAGE_PREFIX }}
           MAJORDOMO_SA_IMAGE_TAG: ${{ vars.MAJORDOMO_SA_IMAGE_TAG }}
           MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
@@ -162,9 +165,9 @@ jobs:
             --head-sha "${HEAD_SHA}" \
             --base-branch "${BASE_BRANCH}" \
             --clone-url "${CLONE_URL}" \
-            --workdir "${{ github.workspace }}/served/repo" \
-            --staging-dir "${{ github.workspace }}/staging/${REPO_ID}-pr-${PR_NUMBER}" \
-            --output-dir "${{ github.workspace }}/review-output/${REPO_ID}/pr-review" \
+            --workdir "${PWD}/served/repo" \
+            --staging-dir "${PWD}/staging/${REPO_ID}-pr-${PR_NUMBER}" \
+            --output-dir "${PWD}/review-output/${REPO_ID}/pr-review" \
             --scripts-dir "${MAJORDOMO_SCRIPTS}" \
             --cursor-dir .poll-cache \
             --publish

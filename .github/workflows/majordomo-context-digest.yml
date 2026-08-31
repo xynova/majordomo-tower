@@ -100,7 +100,7 @@ jobs:
       BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
+      TOWER_SCRIPTS: .majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
@@ -111,10 +111,14 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           name: majordomo-cli
-          path: ${{ github.workspace }}
+          path: .
 
       - name: Make majordomo executable
-        run: chmod +x "${{ github.workspace }}/majordomo"
+        run: |
+          set -euo pipefail
+          ls -la
+          chmod +x ./majordomo
+          test -x ./majordomo
 
       - name: Verify forge CLI on PATH
         run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
@@ -128,7 +132,7 @@ jobs:
           ./majordomo context digest \
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
-            --workdir "${{ github.workspace }}/served/repo" \
+            --workdir "${PWD}/served/repo" \
             $( [ "${{ github.event.inputs.force_compact }}" = "true" ] && echo "--force-compact" ) | tee digest-result.json
           action=$(jq -r '.action' digest-result.json)
           echo "Digest action: ${action}"
