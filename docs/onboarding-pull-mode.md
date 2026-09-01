@@ -71,10 +71,13 @@ cd .majordomo && go build -o ../majordomo ./cmd/majordomo && cd ..
 1. Dispatch (or merge) [`.github/workflows/majordomo-forge-images.yml`](../.github/workflows/majordomo-forge-images.yml) (canonical source: `.majordomo/pipelines/github-actions/tower/majordomo-forge-images.yml`). It builds `.majordomo/dockerfiles/Dockerfile.gh` / `Dockerfile.glab` and pushes:
    - `ghcr.io/xynova/majordomo-tower/majordomo-gh:<sha>` (+ `:latest` on `main`)
    - `ghcr.io/xynova/majordomo-tower/majordomo-glab:<sha>` (+ `:latest` on `main`)
-2. Set tower repository variables:
+2. Dispatch (or merge) [`.github/workflows/majordomo-cli-image.yml`](../.github/workflows/majordomo-cli-image.yml). It builds `.majordomo/dockerfiles/Dockerfile.cli` and pushes:
+   - `ghcr.io/xynova/majordomo-tower/majordomo:<sha>` (+ `:latest` on `main`)
+3. Set tower repository variables:
    - `MAJORDOMO_GH_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-gh:latest`
    - `MAJORDOMO_GLAB_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-glab:latest`
-3. Review, context-digest, and context-gate select the image by `scm` (optional `forge_image` override on review). Each job builds `./majordomo` in the workspace inside that container. When bumping `.majordomo`, diff tower workflows against `.majordomo/pipelines/github-actions/tower/`.
+   - `MAJORDOMO_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo:latest`
+4. Review, context-digest, and context-gate select the forge image by `scm` (optional `forge_image` override on review). Host jobs extract `./majordomo` from `MAJORDOMO_IMAGE` via `extract-majordomo-cli.sh` and pass it into forge containers as an artifact. When bumping `.majordomo`, diff tower workflows against `.majordomo/pipelines/github-actions/tower/`.
 
 Bitbucket publish stays HTTP (no forge container in v1).
 
@@ -93,5 +96,6 @@ majordomo-tower/
     ├── majordomo-review.yml
     ├── majordomo-context-digest.yml
     ├── majordomo-context-gate.yml
+    ├── majordomo-cli-image.yml
     └── majordomo-forge-images.yml
 ```

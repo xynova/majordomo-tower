@@ -16,6 +16,10 @@ on:
         required: false
         default: false
         type: boolean
+      majordomo_image:
+        description: "Optional majordomo CLI image override (default: vars.MAJORDOMO_IMAGE)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -35,6 +39,7 @@ jobs:
       REPO_ID: ${{ github.event.client_payload.repo_id || github.event.inputs.repo_id }}
       MAJORDOMO_GH_IMAGE: ${{ vars.MAJORDOMO_GH_IMAGE }}
       MAJORDOMO_GLAB_IMAGE: ${{ vars.MAJORDOMO_GLAB_IMAGE }}
+      MAJORDOMO_IMAGE: ${{ github.event.inputs.majordomo_image || vars.MAJORDOMO_IMAGE }}
       TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
@@ -42,15 +47,13 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: .majordomo/go.mod
-          cache-dependency-path: .majordomo/go.sum
+      - name: Log in to GHCR
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Build majordomo
-        run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
-        working-directory: .majordomo
+      - name: Extract majordomo CLI from image
+        run: bash "${TOWER_SCRIPTS}/extract-majordomo-cli.sh" "${MAJORDOMO_IMAGE}" "${{ github.workspace }}/majordomo"
 
       - name: Resolve repo metadata
         id: meta
@@ -70,11 +73,21 @@ jobs:
           img=$(bash "${TOWER_SCRIPTS}/resolve-forge-image.sh" "${scm}")
           echo "forge_image=${img}" >> "$GITHUB_OUTPUT"
 
+      - name: Upload majordomo CLI
+        uses: actions/upload-artifact@v6
+        with:
+          name: majordomo-cli
+          path: majordomo
+          if-no-files-found: error
+
   digest:
     needs: resolve
     runs-on: ubuntu-latest
     container:
       image: ${{ needs.resolve.outputs.forge_image }}
+    defaults:
+      run:
+        shell: bash
     concurrency:
       group: context-digest-${{ github.event.client_payload.repo_id || github.event.inputs.repo_id }}
       cancel-in-progress: false
@@ -91,22 +104,24 @@ jobs:
       BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
+      TOWER_SCRIPTS: .majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
         uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Download majordomo CLI
+        uses: actions/download-artifact@v6
         with:
-          go-version-file: .majordomo/go.mod
-          cache-dependency-path: .majordomo/go.sum
+          name: majordomo-cli
+          path: .
 
-      - name: Build majordomo
-        run: go build -o "${{ github.workspace }}/majordomo" ./cmd/majordomo
-        working-directory: .majordomo
+      - name: Make majordomo executable
+        run: |
+          set -euo pipefail
+          chmod +x ./majordomo
+          test -x ./majordomo
 
       - name: Verify forge CLI on PATH
         run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
@@ -122,5 +137,8 @@ jobs:
           ./majordomo context digest \
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
-            --workdir "${{ github.workspace }}/served/repo" \
-            ${extra} | tee digest-result.json
+            --workdir "${PWD}/served/repo" \
+            --out digest-result.json \
+            ${extra}
+          action=$(jq -r '.action' digest-result.json)
+          echo "Digest action: ${action}"
