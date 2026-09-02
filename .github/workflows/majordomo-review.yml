@@ -85,7 +85,7 @@ jobs:
         run: bash "${TOWER_SCRIPTS}/extract-majordomo-cli.sh" "${MAJORDOMO_IMAGE}" "${{ github.workspace }}/majordomo"
 
       - name: Upload majordomo CLI
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: majordomo-cli
           path: majordomo
@@ -126,7 +126,7 @@ jobs:
           submodules: recursive
 
       - name: Download majordomo CLI
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: majordomo-cli
           path: .
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload review artifacts
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: review-${{ env.REPO_ID }}-pr-${{ env.PR_NUMBER }}
           path: |

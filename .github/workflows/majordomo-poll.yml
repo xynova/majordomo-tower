@@ -94,7 +94,7 @@ jobs:
           done
 
       - name: Upload pending artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pending-reviews
           path: pending-reviews.json
