@@ -54,6 +54,39 @@ pipelines:
       pr-review-code:
         - "**"
 
+# Named AI providers. Tasks without a job_configs entry fall back to the
+# embedded gateway using MAJORDOMO_MODEL / pipelines.pr-review.model.
+# Secrets stay in env vars; interpolate with ${VAR}.
+#
+# Context digest uses local Polypus (:1320) → Cloudflare Workers AI.
+# Typology cluster/refine and story modules use Gemma 4 (gpt-oss kept as an alternate provider).
+# Requires Polypus running with INFERENCE_CLOUD_CASE=1 and CF credentials.
+ai_providers:
+  polypus_gemma:
+    api_schema: openai
+    api_key: local
+    model: "@cf/google/gemma-4-26b-a4b-it"
+    base_url: "http://127.0.0.1:1320/v1"
+    timeout: "120s"
+  polypus_gpt_oss:
+    api_schema: openai
+    api_key: local
+    model: "@cf/openai/gpt-oss-20b"
+    base_url: "http://127.0.0.1:1320/v1"
+    timeout: "120s"
+
+job_configs:
+  context-digest:
+    modules:
+      typology_cluster:
+        provider: polypus_gemma
+      typology_refine:
+        provider: polypus_gemma
+      bootstrap_story:
+        provider: polypus_gemma
+      digest_story:
+        provider: polypus_gemma
+
 # Example static analysis (images must be reachable from the runner):
 # staticAnalysis:
 #   - tool: ruff

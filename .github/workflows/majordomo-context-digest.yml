@@ -50,6 +50,12 @@ jobs:
       - name: Extract majordomo CLI from image
         run: bash "${TOWER_SCRIPTS}/extract-majordomo-cli.sh" "${MAJORDOMO_IMAGE}" "${{ github.workspace }}/majordomo"
 
+      - name: Build Typology CLI
+        run: |
+          set -euo pipefail
+          GOBIN="${{ github.workspace }}" go install github.com/behaviorengineering/typology/cmd/typology@v0.0.8
+          chmod +x "${{ github.workspace }}/typology"
+
       - name: Plan digest targets
         id: plan
         run: |
@@ -73,6 +79,13 @@ jobs:
           path: majordomo
           if-no-files-found: error
 
+      - name: Upload Typology CLI
+        uses: actions/upload-artifact@v7
+        with:
+          name: typology-cli
+          path: typology
+          if-no-files-found: error
+
   digest:
     needs: plan
     if: needs.plan.outputs.matrix != '{"include":[]}'
@@ -93,6 +106,7 @@ jobs:
       SCM: ${{ matrix.scm }}
       OWNER: ${{ matrix.owner }}
       NAME: ${{ matrix.name }}
+      MODULE_SCOPE: ${{ matrix.module_scope || '' }}
       CLONE_URL: ${{ matrix.clone_url }}
       GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
       GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
@@ -100,6 +114,8 @@ jobs:
       BITBUCKET_TOKEN: ${{ secrets.BITBUCKET_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
       TOWER_SCRIPTS: .majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
@@ -113,12 +129,20 @@ jobs:
           name: majordomo-cli
           path: .
 
+      - name: Download Typology CLI
+        uses: actions/download-artifact@v8
+        with:
+          name: typology-cli
+          path: .
+
       - name: Make majordomo executable
         run: |
           set -euo pipefail
           ls -la
           chmod +x ./majordomo
+          chmod +x ./typology
           test -x ./majordomo
+          test -x ./typology
 
       - name: Verify forge CLI on PATH
         run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
@@ -133,6 +157,9 @@ jobs:
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
             --workdir "${PWD}/served/repo" \
+            --typology-binary "${PWD}/typology" \
+            --module-scope "${MODULE_SCOPE:-}" \
+            --bootstrap-survey-policy auto \
             --out digest-result.json \
             $( [ "${{ github.event.inputs.force_compact }}" = "true" ] && echo "--force-compact" )
           action=$(jq -r '.action' digest-result.json)
