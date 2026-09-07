@@ -82,6 +82,8 @@ job_configs:
         provider: polypus_gemma
       typology_refine:
         provider: polypus_gemma
+      typology_human_intervention:
+        provider: polypus_gemma
       bootstrap_story:
         provider: polypus_gemma
       digest_story:
