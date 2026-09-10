@@ -86,6 +86,16 @@ job_configs:
         provider: polypus_gemma
       typology_human_intervention:
         provider: polypus_gemma
+      typology_intervention_journey:
+        provider: polypus_gemma
+      typology_intervention_brief:
+        provider: polypus_gemma
+      typology_intervention_weaknesses:
+        provider: polypus_gemma
+      typology_intervention_pr_priority:
+        provider: polypus_gemma
+      typology_finding_comment:
+        provider: polypus_gemma
       bootstrap_story:
         provider: polypus_gemma
       digest_story:
