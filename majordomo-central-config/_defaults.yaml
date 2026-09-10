@@ -78,6 +78,8 @@ ai_providers:
 job_configs:
   context-digest:
     modules:
+      typology_inspect:
+        provider: polypus_gemma
       typology_cluster:
         provider: polypus_gemma
       typology_refine:
