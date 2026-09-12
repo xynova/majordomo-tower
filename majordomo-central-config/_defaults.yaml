@@ -68,6 +68,12 @@ ai_providers:
     model: "@cf/google/gemma-4-26b-a4b-it"
     base_url: "http://127.0.0.1:1320/v1"
     timeout: "120s"
+  polypus_gemma_rlm:
+    api_schema: openai
+    api_key: local
+    model: "@cf/google/gemma-4-26b-a4b-it"
+    base_url: "http://127.0.0.1:1320/v1"
+    timeout: "15m"
   polypus_gpt_oss:
     api_schema: openai
     api_key: local
@@ -79,7 +85,9 @@ job_configs:
   context-digest:
     modules:
       typology_inspect:
-        provider: polypus_gemma
+        provider: polypus_gemma_rlm
+      typology_objective_grounding:
+        provider: polypus_gemma_rlm
       typology_cluster:
         provider: polypus_gemma
       typology_refine:
