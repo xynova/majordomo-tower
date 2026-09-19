@@ -34,6 +34,16 @@ review:
   # true: re-queue whenever head_sha changes.
   enableContinuousRuns: true
 
+# OTLP export for Phoenix / Arize (or any OTLP collector).
+# Env overrides: MAJORDOMO_OTEL_ENDPOINT, MAJORDOMO_OTEL_API_KEY / PHOENIX_API_KEY,
+# MAJORDOMO_OTEL_ENABLED, MAJORDOMO_OTEL_SERVICE_NAME, MAJORDOMO_OTEL_INSECURE.
+observability:
+  endpoint: "localhost:4317" # Phoenix OTLP gRPC; empty skips OTLP
+  # api_key: ${PHOENIX_API_KEY} # Bearer; optional when Phoenix auth is off
+  # service_name: github.com/behaviorengineering/majordomo
+  # insecure: true # default auto: true for localhost, false otherwise
+  # enabled: true
+
 pipelines:
   pr-review:
     # model: anthropic/claude-sonnet-4-5
