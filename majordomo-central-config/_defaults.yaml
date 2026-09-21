@@ -96,11 +96,13 @@ job_configs:
     modules:
       typology_inspect:
         provider: polypus_gemma_rlm
-      typology_objective_grounding:
+      typology_slice_meaning:
         provider: polypus_gemma_rlm
-      typology_cluster:
+      typology_slice_grouping:
         provider: polypus_gemma
-      typology_refine:
+      typology_slice_grouping_audit:
+        provider: polypus_gemma_rlm
+      typology_slice_catalog:
         provider: polypus_gemma
       typology_human_intervention:
         provider: polypus_gemma
