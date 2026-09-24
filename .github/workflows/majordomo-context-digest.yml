@@ -16,8 +16,8 @@ on:
         description: "Optional single repo id (default: all digest targets)"
         required: false
         type: string
-      majordomo_image:
-        description: "Optional majordomo CLI image override (default: vars.MAJORDOMO_IMAGE)"
+      majordomo_context_image:
+        description: "Optional majordomo-context factory image override (default: vars.MAJORDOMO_CONTEXT_IMAGE)"
         required: false
         type: string
 
@@ -34,7 +34,7 @@ jobs:
     env:
       MAJORDOMO_GH_IMAGE: ${{ vars.MAJORDOMO_GH_IMAGE }}
       MAJORDOMO_GLAB_IMAGE: ${{ vars.MAJORDOMO_GLAB_IMAGE }}
-      MAJORDOMO_IMAGE: ${{ github.event.inputs.majordomo_image || vars.MAJORDOMO_IMAGE }}
+      MAJORDOMO_CONTEXT_IMAGE: ${{ github.event.inputs.majordomo_context_image || vars.MAJORDOMO_CONTEXT_IMAGE }}
       TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
@@ -47,8 +47,24 @@ jobs:
           set -euo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Extract majordomo CLI from image
-        run: bash "${TOWER_SCRIPTS}/extract-majordomo-cli.sh" "${MAJORDOMO_IMAGE}" "${{ github.workspace }}/majordomo"
+      - name: Extract majordomo-context factory CLI from image
+        run: bash "${TOWER_SCRIPTS}/extract-majordomo-context-cli.sh" "${MAJORDOMO_CONTEXT_IMAGE}" "${{ github.workspace }}/majordomo-context"
+
+      - name: Write factory license
+        env:
+          MAJORDOMO_CONTEXT_LICENSE_B64: ${{ secrets.MAJORDOMO_CONTEXT_LICENSE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MAJORDOMO_CONTEXT_LICENSE_B64}" ]; then
+            echo "secrets.MAJORDOMO_CONTEXT_LICENSE is required (license.lic contents or base64)" >&2
+            exit 1
+          fi
+          # Accept raw JSON license or base64-encoded file bytes.
+          if printf '%s' "${MAJORDOMO_CONTEXT_LICENSE_B64}" | head -c 1 | grep -q '{'; then
+            printf '%s\n' "${MAJORDOMO_CONTEXT_LICENSE_B64}" > "${{ github.workspace }}/majordomo-context.lic"
+          else
+            printf '%s' "${MAJORDOMO_CONTEXT_LICENSE_B64}" | base64 -d > "${{ github.workspace }}/majordomo-context.lic"
+          fi
 
       - name: Build Typology CLI
         run: |
@@ -60,7 +76,7 @@ jobs:
         id: plan
         run: |
           set -euo pipefail
-          ./majordomo context repos \
+          ./majordomo-context repos --license ./majordomo-context.lic \
             --config-dir majordomo-central-config \
             --out context-repos.json
           count=$(jq '.repos | length' context-repos.json)
@@ -72,11 +88,18 @@ jobs:
           matrix=$(bash "${TOWER_SCRIPTS}/enrich-context-repos-matrix.sh" context-repos.json)
           echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload majordomo CLI
+      - name: Upload majordomo-context CLI
         uses: actions/upload-artifact@v7
         with:
-          name: majordomo-cli
-          path: majordomo
+          name: majordomo-context-cli
+          path: majordomo-context
+          if-no-files-found: error
+
+      - name: Upload factory license
+        uses: actions/upload-artifact@v7
+        with:
+          name: majordomo-context-license
+          path: majordomo-context.lic
           if-no-files-found: error
 
       - name: Upload Typology CLI
@@ -123,10 +146,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download majordomo CLI
+      - name: Download majordomo-context CLI
         uses: actions/download-artifact@v8
         with:
-          name: majordomo-cli
+          name: majordomo-context-cli
+          path: .
+
+      - name: Download factory license
+        uses: actions/download-artifact@v8
+        with:
+          name: majordomo-context-license
           path: .
 
       - name: Download Typology CLI
@@ -135,14 +164,15 @@ jobs:
           name: typology-cli
           path: .
 
-      - name: Make majordomo executable
+      - name: Make majordomo-context executable
         run: |
           set -euo pipefail
           ls -la
-          chmod +x ./majordomo
+          chmod +x ./majordomo-context
           chmod +x ./typology
-          test -x ./majordomo
+          test -x ./majordomo-context
           test -x ./typology
+          test -s ./majordomo-context.lic
 
       - name: Verify forge CLI on PATH
         run: bash "${TOWER_SCRIPTS}/verify-forge-cli.sh"
@@ -153,7 +183,7 @@ jobs:
         run: |
           set -euo pipefail
           bash "${TOWER_SCRIPTS}/clone-served-repo.sh" served/repo
-          ./majordomo context digest \
+          ./majordomo-context digest --license ./majordomo-context.lic \
             --config-dir majordomo-central-config \
             --repo-id "${REPO_ID}" \
             --workdir "${PWD}/served/repo" \
