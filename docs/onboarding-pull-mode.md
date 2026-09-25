@@ -81,7 +81,7 @@ cd .majordomo && go build -o ../majordomo ./cmd/majordomo && cd ..
 4. Set tower repository secrets for jobs that call LLMs or the licensed factory:
    - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and/or `GEMINI_API_KEY` (review Judge waves)
    - `MAJORDOMO_CONTEXT_LICENSE` (JSON license or base64 `license.lic` for `majordomo-context digest` / `gate`)
-5. Review resolves repo context through the open `ContextProvider` seam: explicit `--context-dir` when set, otherwise optional shallow clone of `majordomo-context/<repo-id>` beside the served repo. Missing context skips grounding; invalid explicit dirs fail the job.
+5. Review resolves repo context through the open `ContextProvider` seam: explicit `--context-dir` when set, otherwise optional shallow clone of `majordomo-context/<repo-id>` beside the served repo. Prep pins one commit per run (`ls-remote` once or `MAJORDOMO_CONTEXT_SHA` / `--context-sha`) and records it in `batch-plan.json` under `context_pin`. Missing context skips grounding; invalid explicit dirs fail the job.
 6. Review, context-digest, and context-gate select the forge image by `scm` (optional `forge_image` override on review). Host jobs extract `./majordomo` from `MAJORDOMO_IMAGE` via `extract-majordomo-cli.sh` and pass it into forge containers as an artifact. Context digest/gate extract `./majordomo-context` from `MAJORDOMO_CONTEXT_IMAGE` via `extract-majordomo-context-cli.sh`. When bumping `.majordomo`, diff tower workflows against `.majordomo/pipelines/github-actions/tower/`.
 
 Bitbucket publish stays HTTP (no forge container in v1).
