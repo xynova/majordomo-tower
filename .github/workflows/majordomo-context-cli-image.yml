@@ -1,0 +1,88 @@
+# Build and push majordomo-context factory CLI image to tower GHCR (binary at /majordomo-context).
+# Source: private gitlab.com/behaviorengineering/majordomo-context (Dockerfile on main).
+name: majordomo-context-cli-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      factory_ref:
+        description: Git ref on behaviorengineering/majordomo-context
+        required: false
+        default: main
+  push:
+    branches: [main, master]
+    paths:
+      - ".github/workflows/majordomo-context-cli-image.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/xynova/majordomo-tower
+  IMAGE_NAME: majordomo-context
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout tower (extract script)
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Clone majordomo-context factory
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
+          FACTORY_REF: ${{ github.event.inputs.factory_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITLAB_TOKEN}" ]; then
+            echo "secrets.GITLAB_TOKEN_BEHAVIORENGINEERING is required to clone the private factory" >&2
+            exit 1
+          fi
+          git clone --depth 1 --branch "${FACTORY_REF}" \
+            "https://oauth2:${GITLAB_TOKEN}@gitlab.com/behaviorengineering/majordomo-context.git" \
+            factory-src
+
+      - name: Log in to GHCR
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build majordomo-context CLI image
+        id: build
+        run: |
+          set -euo pipefail
+          factory_sha="$(git -C factory-src rev-parse HEAD)"
+          echo "factory_sha=${factory_sha}" >> "${GITHUB_OUTPUT}"
+          image="${REGISTRY}/${IMAGE_NAME}:${factory_sha}"
+          docker build -t "${image}" -f factory-src/Dockerfile factory-src
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+
+      - name: Push majordomo-context CLI image
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.build.outputs.image }}"
+
+      - name: Smoke majordomo-context CLI
+        env:
+          TOWER_SCRIPTS: ${{ github.workspace }}/.majordomo/pipelines/scripts/tower
+        run: |
+          set -euo pipefail
+          bash "${TOWER_SCRIPTS}/extract-majordomo-context-cli.sh" \
+            "${{ steps.build.outputs.image }}" \
+            "${{ github.workspace }}/majordomo-context-from-image"
+          test -s "${{ github.workspace }}/majordomo-context-from-image"
+          echo OK
+
+      - name: Tag and push latest (default branch)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          src="${{ steps.build.outputs.image }}"
+          latest="${REGISTRY}/${IMAGE_NAME}:latest"
+          docker tag "${src}" "${latest}"
+          docker push "${latest}"
+          echo "Pushed ${latest}"

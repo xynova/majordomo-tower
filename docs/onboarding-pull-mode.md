@@ -73,16 +73,18 @@ cd .majordomo && go build -o ../majordomo ./cmd/majordomo && cd ..
    - `ghcr.io/xynova/majordomo-tower/majordomo-glab:<sha>` (+ `:latest` on `main`)
 2. Dispatch (or merge) [`.github/workflows/majordomo-cli-image.yml`](../.github/workflows/majordomo-cli-image.yml). It builds `.majordomo/dockerfiles/Dockerfile.cli` and pushes:
    - `ghcr.io/xynova/majordomo-tower/majordomo:<sha>` (+ `:latest` on `main`)
-3. Set tower repository variables:
+3. Dispatch [`.github/workflows/majordomo-context-cli-image.yml`](../.github/workflows/majordomo-context-cli-image.yml) after merging factory changes on GitLab `behaviorengineering/majordomo-context`. It clones that repo (needs `secrets.GITLAB_TOKEN_BEHAVIORENGINEERING`) and pushes:
+   - `ghcr.io/xynova/majordomo-tower/majordomo-context:<factory-sha>` (+ `:latest` when run from tower `main`)
+4. Set tower repository variables:
    - `MAJORDOMO_GH_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-gh:latest`
    - `MAJORDOMO_GLAB_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-glab:latest`
    - `MAJORDOMO_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo:latest`
-   - `MAJORDOMO_CONTEXT_IMAGE=<registry>/majordomo-context:latest` (private factory CLI image; binary at `/majordomo-context`)
-4. Set tower repository secrets for jobs that call LLMs or the licensed factory:
+   - `MAJORDOMO_CONTEXT_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-context:latest` (private factory CLI image; binary at `/majordomo-context`)
+5. Set tower repository secrets for jobs that call LLMs or the licensed factory:
    - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and/or `GEMINI_API_KEY` (review Judge waves)
    - `MAJORDOMO_CONTEXT_LICENSE` (JSON license or base64 `license.lic` for `majordomo-context digest` / `gate`)
-5. Review resolves repo context through the open `ContextProvider` seam: explicit `--context-dir` when set, otherwise optional shallow clone of `majordomo-context/<repo-id>` beside the served repo. Prep pins one commit per run (`ls-remote` once or `MAJORDOMO_CONTEXT_SHA` / `--context-sha`) and records it in `batch-plan.json` under `context_pin`. Missing context skips grounding; invalid explicit dirs fail the job.
-6. Review, context-digest, and context-gate select the forge image by `scm` (optional `forge_image` override on review). Host jobs extract `./majordomo` from `MAJORDOMO_IMAGE` via `extract-majordomo-cli.sh` and pass it into forge containers as an artifact. Context digest/gate extract `./majordomo-context` from `MAJORDOMO_CONTEXT_IMAGE` via `extract-majordomo-context-cli.sh`. When bumping `.majordomo`, diff tower workflows against `.majordomo/pipelines/github-actions/tower/`.
+6. Review resolves repo context through the open `ContextProvider` seam: explicit `--context-dir` when set, otherwise optional shallow clone of `majordomo-context/<repo-id>` beside the served repo. Prep pins one commit per run (`ls-remote` once or `MAJORDOMO_CONTEXT_SHA` / `--context-sha`) and records it in `batch-plan.json` under `context_pin`. Missing context skips grounding; invalid explicit dirs fail the job.
+7. Review, context-digest, and context-gate select the forge image by `scm` (optional `forge_image` override on review). Host jobs extract `./majordomo` from `MAJORDOMO_IMAGE` via `extract-majordomo-cli.sh` and pass it into forge containers as an artifact. Context digest/gate extract `./majordomo-context` from `MAJORDOMO_CONTEXT_IMAGE` via `extract-majordomo-context-cli.sh`. When bumping `.majordomo`, diff tower workflows against `.majordomo/pipelines/github-actions/tower/`.
 
 Bitbucket publish stays HTTP (no forge container in v1).
 
@@ -102,5 +104,6 @@ majordomo-tower/
     ├── majordomo-context-digest.yml
     ├── majordomo-context-gate.yml
     ├── majordomo-cli-image.yml
+    ├── majordomo-context-cli-image.yml
     └── majordomo-forge-images.yml
 ```
