@@ -28,7 +28,7 @@ The workflow `secrets.GITHUB_TOKEN` is only for operating on **this tower** (e.g
 
 1. **Credential**
    - Create a fine-grained GitHub PAT (one resource owner) or GitLab group token with list + comment scopes
-   - Add tower secrets: `GH_TOKEN_XYNOVA`, `GH_TOKEN_BEHAVIORENGINEERING`, `GITLAB_TOKEN_BEHAVIORENGINEERING`, etc.
+   - Add tower secrets: `GH_TOKEN_XYNOVA`, `GH_TOKEN_BEHAVIORENGINEERING`, `GITLAB_TOKEN_BEHAVIORENGINEERING`, `GITLAB_TOKEN_DUALSUBSTRATE`, etc.
    - Ensure poll/review workflows pass those env vars into the job
 
 2. **Config**

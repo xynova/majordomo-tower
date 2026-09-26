@@ -47,6 +47,7 @@ jobs:
           GH_TOKEN_XYNOVA: ${{ secrets.GH_TOKEN_XYNOVA }}
           GH_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GH_TOKEN_BEHAVIORENGINEERING }}
           GITLAB_TOKEN_BEHAVIORENGINEERING: ${{ secrets.GITLAB_TOKEN_BEHAVIORENGINEERING }}
+          GITLAB_TOKEN_DUALSUBSTRATE: ${{ secrets.GITLAB_TOKEN_DUALSUBSTRATE }}
         run: |
           mkdir -p .poll-cache
           ./majordomo poll \

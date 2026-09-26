@@ -1,0 +1,13 @@
+# Served repo: https://gitlab.com/dualsubstrate/dss-conform
+# Secret: GITLAB_TOKEN_DUALSUBSTRATE (optional override MAJORDOMO_CREDENTIAL_DSS_CONFORM).
+
+scm: gitlab
+
+repository:
+  id: dss-conform
+  owner: dualsubstrate
+  name: dss-conform
+  cloneUrl: https://gitlab.com/dualsubstrate/dss-conform.git
+
+scmApi:
+  baseUrl: https://gitlab.com
