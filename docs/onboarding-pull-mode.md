@@ -35,6 +35,7 @@ The workflow `secrets.GITHUB_TOKEN` is only for operating on **this tower** (e.g
    - GitHub: copy [`example-github.yaml`](../majordomo-central-config/example-github.yaml)
    - GitLab: copy [`example-gitlab.yaml`](../majordomo-central-config/example-gitlab.yaml)
    - Save as `majordomo-central-config/<repo_id>.yaml` and set `repository.*` / `scmApi.*` (include `repository.owner`)
+   - **Local laptop (optional):** run `majordomo init`, edit `~/.config/majordomo/config.yaml` (`config_dir` toward this checkout's `majordomo-central-config`, `secrets:` for org tokens). CI keeps `--config-dir majordomo-central-config` and Actions env only.
 
 3. **Pin pipeline**
    - Ensure `.majordomo` submodule points at a majordomo SHA that includes org-scoped credential lookup
