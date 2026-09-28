@@ -69,7 +69,7 @@ pipelines:
 # Secrets stay in env vars; interpolate with ${VAR}.
 #
 # Context digest uses local Polypus (:1320) → Cloudflare Workers AI.
-# Typology cluster/refine and story modules use Gemma 4 (gpt-oss kept as an alternate provider).
+# Typology digest modules use Gemma 4 via local Polypus.
 # Requires Polypus running with INFERENCE_CLOUD_CASE=1 and CF credentials.
 ai_providers:
   polypus_gemma:
@@ -84,25 +84,22 @@ ai_providers:
     model: "@cf/google/gemma-4-26b-a4b-it"
     base_url: "http://127.0.0.1:1320/v1"
     timeout: "15m"
-  polypus_gpt_oss:
-    api_schema: openai
-    api_key: local
-    model: "@cf/openai/gpt-oss-20b"
-    base_url: "http://127.0.0.1:1320/v1"
-    timeout: "120s"
-
+# Context digest load: factory defaults to 2 concurrent package_inspector RLMs and
+# skips LLM retries on 429/breaker (override with MAJORDOMO_PACKAGE_INSPECTOR_WORKERS or --package-inspector-workers).
+# Inference pacing (L1): digest-wide ~4 rps admit with adaptive AIMD on 429/breaker and cooldown retries when pacing is on
+# (MAJORDOMO_INFERENCE_MAX_RPS, MAJORDOMO_INFERENCE_MIN_RPS, MAJORDOMO_INFERENCE_PACE_MODE or --inference-* flags; max_rps<=0 unlimited).
 job_configs:
   context-digest:
     modules:
-      typology_inspect:
+      typology_package_inspector:
         provider: polypus_gemma_rlm
-      typology_slice_meaning:
-        provider: polypus_gemma_rlm
-      typology_slice_grouping:
+      typology_slice_objective_ledger_writer:
         provider: polypus_gemma
-      typology_slice_grouping_audit:
+      typology_slice_merge_proposer:
+        provider: polypus_gemma
+      typology_slice_merge_challenger:
         provider: polypus_gemma_rlm
-      typology_slice_catalog:
+      typology_slice_catalog_assembler:
         provider: polypus_gemma
       typology_human_intervention:
         provider: polypus_gemma

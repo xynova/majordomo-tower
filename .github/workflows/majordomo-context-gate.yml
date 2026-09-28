@@ -167,6 +167,8 @@ jobs:
       - name: Run context digest (gate acceleration)
         env:
           MAJORDOMO_REPO_ID: ${{ env.REPO_ID }}
+          MAJORDOMO_INFERENCE_MAX_RPS: "4"
+          MAJORDOMO_INFERENCE_PACE_MODE: adaptive
         run: |
           set -euo pipefail
           bash "${TOWER_SCRIPTS}/clone-served-repo.sh" served/repo

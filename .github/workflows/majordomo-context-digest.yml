@@ -139,6 +139,8 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       MAJORDOMO_MODEL: ${{ vars.MAJORDOMO_MODEL }}
+      MAJORDOMO_INFERENCE_MAX_RPS: "4"
+      MAJORDOMO_INFERENCE_PACE_MODE: adaptive
       TOWER_SCRIPTS: .majordomo/pipelines/scripts/tower
     steps:
       - name: Checkout tower (with submodule)
