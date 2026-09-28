@@ -2,8 +2,11 @@
 # Wire tower + nested majordomo Cursor skills to strop ai-copilots.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -d "${ROOT}/../strop/ai-copilots/skills" ]]; then
+	export STROP_MOD="$(cd "${ROOT}/../strop" && pwd)"
+fi
 "$ROOT/.majordomo/scripts/wire-strop-ai-copilots.sh"
-MOD="$(cd "$ROOT/.majordomo" && go list -m -f '{{.Dir}}' github.com/behaviorengineering/strop)"
+MOD="${STROP_MOD:-$(cd "$ROOT/.majordomo" && go list -m -f '{{.Dir}}' github.com/behaviorengineering/strop)}"
 mkdir -p "$ROOT/.cursor/skills"
 for name in strop-pipeline-pattern strop-orchestration strop-human-review inference-pace; do
 	ln -snf "$MOD/ai-copilots/skills/${name}" "$ROOT/.cursor/skills/${name}"
