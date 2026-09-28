@@ -77,7 +77,7 @@ cd .majordomo && go build -o ../majordomo ./cmd/majordomo && cd ..
    - `ghcr.io/xynova/majordomo-tower/majordomo-context:<factory-sha>` (+ `:latest` when run from tower `main`)
    - Factory releases that bump `github.com/behaviorengineering/strop` (for example `v0.5.8` pipeline trajectory) or add digest inference pacing require a fresh context image before digest/gate pick up the behavior; set `MAJORDOMO_CONTEXT_IMAGE` to that new tag or digest, not an older factory SHA.
    - Tower digest/gate jobs set `MAJORDOMO_INFERENCE_MAX_RPS=4` and `MAJORDOMO_INFERENCE_PACE_MODE=adaptive` once the factory image includes pacing (commit `e234a0f` on `feat/typology-agentive-names-and-inspect-load` or later on `main`). Judge CoT generators use the same gate via `judge.RuntimeOptions.WrapLLM` once majordomo and factory images include that seam.
-   - **Local IDE:** wire strop `ai-copilots` per `github.com/behaviorengineering/strop` `ai-copilots/BOOTSTRAP.md` (includes `inference-pace` and collision-safe links). Do not overwrite cursor-packs symlinks under `.cursor/skills/`.
+   - **Local IDE:** run `./scripts/wire-strop-ai-copilots.sh` after clone or strop bumps (wires all strop skills including `inference-pace`; paths are gitignored, not committed). Do not overwrite cursor-packs symlinks under `.cursor/skills/`.
 4. Set tower repository variables:
    - `MAJORDOMO_GH_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-gh:latest`
    - `MAJORDOMO_GLAB_IMAGE=ghcr.io/xynova/majordomo-tower/majordomo-glab:latest`
