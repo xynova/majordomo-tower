@@ -71,7 +71,7 @@ pipelines:
 # Polypus gateway root: POLYPUS_BASE_URL (same as ask-polypus; no /v1 suffix).
 # Default loopback when unset. Local seed against Tailscale:
 #   export POLYPUS_BASE_URL=https://polypus.manticore-powan.ts.net
-# Code-related tasks default to DeepSeek V4 Flash; prose/intervention/story tasks stay on Gemma 4.
+# Code-related tasks default to DeepSeek V4 Flash; human prose (PR summary, intervention, stories) stays on Gemma 4.
 # Local Polypus: allow @cf/deepseek-ai/deepseek-v4-flash-0731 (see router/code in ~/.config/polypus/config.yaml).
 ai_providers:
   polypus_deepseek:
@@ -109,6 +109,8 @@ job_configs:
         provider: polypus_deepseek
       technical:
         provider: polypus_deepseek
+      summary:
+        provider: polypus_gemma
   context-digest:
     modules:
       typology_package_inspector:
