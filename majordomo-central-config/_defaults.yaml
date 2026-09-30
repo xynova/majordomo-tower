@@ -66,35 +66,37 @@ pipelines:
 
 # Named AI providers. Tasks without a job_configs entry fall back to the
 # embedded gateway using MAJORDOMO_MODEL / pipelines.pr-review.model.
-# Secrets stay in env vars; interpolate with ${VAR}.
+# Secrets stay in env vars; interpolate with ${VAR} or ${VAR:-default}.
 #
-# Context digest uses local Polypus (:1320) → Cloudflare Workers AI.
-# Code checks (PR filereview, typology package_inspector) default to DeepSeek V4 Flash.
-# Other typology modules stay on Gemma 4. Requires Polypus + INFERENCE_CLOUD_CASE=1 and CF credentials.
+# Polypus gateway root: POLYPUS_BASE_URL (same as ask-polypus; no /v1 suffix).
+# Default loopback when unset. Local seed against Tailscale:
+#   export POLYPUS_BASE_URL=https://polypus.manticore-powan.ts.net
+# Code-related tasks default to DeepSeek V4 Flash; prose/intervention/story tasks stay on Gemma 4.
+# Local Polypus: allow @cf/deepseek-ai/deepseek-v4-flash-0731 (see router/code in ~/.config/polypus/config.yaml).
 ai_providers:
   polypus_deepseek:
     api_schema: openai
     api_key: local
     model: "@cf/deepseek-ai/deepseek-v4-flash-0731"
-    base_url: "http://127.0.0.1:1320/v1"
+    base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "120s"
   polypus_deepseek_rlm:
     api_schema: openai
     api_key: local
     model: "@cf/deepseek-ai/deepseek-v4-flash-0731"
-    base_url: "http://127.0.0.1:1320/v1"
+    base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "15m"
   polypus_gemma:
     api_schema: openai
     api_key: local
     model: "@cf/google/gemma-4-26b-a4b-it"
-    base_url: "http://127.0.0.1:1320/v1"
+    base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "120s"
   polypus_gemma_rlm:
     api_schema: openai
     api_key: local
     model: "@cf/google/gemma-4-26b-a4b-it"
-    base_url: "http://127.0.0.1:1320/v1"
+    base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "15m"
 # Context digest load: factory defaults to 2 concurrent package_inspector RLMs and
 # skips LLM retries on 429/breaker (override with MAJORDOMO_PACKAGE_INSPECTOR_WORKERS or --package-inspector-workers).
@@ -105,18 +107,20 @@ job_configs:
     modules:
       filereview:
         provider: polypus_deepseek
+      technical:
+        provider: polypus_deepseek
   context-digest:
     modules:
       typology_package_inspector:
         provider: polypus_deepseek_rlm
       typology_slice_objective_ledger_writer:
-        provider: polypus_gemma
+        provider: polypus_deepseek
       typology_slice_merge_proposer:
-        provider: polypus_gemma
+        provider: polypus_deepseek
       typology_slice_merge_challenger:
-        provider: polypus_gemma_rlm
+        provider: polypus_deepseek_rlm
       typology_slice_catalog_assembler:
-        provider: polypus_gemma
+        provider: polypus_deepseek
       typology_human_intervention:
         provider: polypus_gemma
       typology_intervention_journey:
@@ -128,7 +132,7 @@ job_configs:
       typology_intervention_pr_priority:
         provider: polypus_gemma
       typology_finding_comment:
-        provider: polypus_gemma
+        provider: polypus_deepseek
       bootstrap_story:
         provider: polypus_gemma
       digest_story:
