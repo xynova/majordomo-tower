@@ -69,9 +69,21 @@ pipelines:
 # Secrets stay in env vars; interpolate with ${VAR}.
 #
 # Context digest uses local Polypus (:1320) → Cloudflare Workers AI.
-# Typology digest modules use Gemma 4 via local Polypus.
-# Requires Polypus running with INFERENCE_CLOUD_CASE=1 and CF credentials.
+# Code checks (PR filereview, typology package_inspector) default to DeepSeek V4 Flash.
+# Other typology modules stay on Gemma 4. Requires Polypus + INFERENCE_CLOUD_CASE=1 and CF credentials.
 ai_providers:
+  polypus_deepseek:
+    api_schema: openai
+    api_key: local
+    model: "@cf/deepseek-ai/deepseek-v4-flash-0731"
+    base_url: "http://127.0.0.1:1320/v1"
+    timeout: "120s"
+  polypus_deepseek_rlm:
+    api_schema: openai
+    api_key: local
+    model: "@cf/deepseek-ai/deepseek-v4-flash-0731"
+    base_url: "http://127.0.0.1:1320/v1"
+    timeout: "15m"
   polypus_gemma:
     api_schema: openai
     api_key: local
@@ -89,10 +101,14 @@ ai_providers:
 # Inference pacing (L1): digest-wide ~4 rps admit with adaptive AIMD on 429/breaker and cooldown retries when pacing is on
 # (MAJORDOMO_INFERENCE_MAX_RPS, MAJORDOMO_INFERENCE_MIN_RPS, MAJORDOMO_INFERENCE_PACE_MODE or --inference-* flags; max_rps<=0 unlimited).
 job_configs:
+  pr-review:
+    modules:
+      filereview:
+        provider: polypus_deepseek
   context-digest:
     modules:
       typology_package_inspector:
-        provider: polypus_gemma_rlm
+        provider: polypus_deepseek_rlm
       typology_slice_objective_ledger_writer:
         provider: polypus_gemma
       typology_slice_merge_proposer:
