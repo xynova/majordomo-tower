@@ -9,3 +9,5 @@ logs/
 .cursor/skills/strop-pipeline-pattern
 .cursor/skills/strop-orchestration
 .cursor/skills/strop-human-review
+.cursor/skills/inference-pace
+.cursor/skills/openai-batch
