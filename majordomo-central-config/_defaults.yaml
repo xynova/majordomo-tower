@@ -71,19 +71,20 @@ pipelines:
 # Polypus gateway root: POLYPUS_BASE_URL (same as ask-polypus; no /v1 suffix).
 # Default loopback when unset. Local seed against Tailscale:
 #   export POLYPUS_BASE_URL=https://polypus.manticore-powan.ts.net
-# Code-related tasks default to DeepSeek V4 Flash; human prose (PR summary, intervention, stories) stays on Gemma 4.
-# Local Polypus: allow @cf/deepseek-ai/deepseek-v4-flash-0731 (see router/code in ~/.config/polypus/config.yaml).
+# Code-related tasks: DeepSeek V4 Flash via Polypus (model id routes to Deep Infra or other backend in ~/.config/polypus).
+# Human prose (PR summary, intervention, stories) stays on Gemma 4 (@cf/...) through the same gateway.
+# Polypus: POLYPUS_BASE_URL; allow deepseek-ai/DeepSeek-V4-Flash-0731 in polypus router config.
 ai_providers:
   polypus_deepseek:
     api_schema: openai
     api_key: local
-    model: "@cf/deepseek-ai/deepseek-v4-flash-0731"
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
     base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "120s"
   polypus_deepseek_rlm:
     api_schema: openai
     api_key: local
-    model: "@cf/deepseek-ai/deepseek-v4-flash-0731"
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
     base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "15m"
   polypus_gemma:
