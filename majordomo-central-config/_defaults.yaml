@@ -73,18 +73,18 @@ pipelines:
 #   export POLYPUS_BASE_URL=https://polypus.manticore-powan.ts.net
 # Code-related tasks: DeepSeek V4 Flash via Polypus (model id routes to Deep Infra or other backend in ~/.config/polypus).
 # Human prose (PR summary, intervention, stories) stays on Gemma 4 (@cf/...) through the same gateway.
-# Polypus: POLYPUS_BASE_URL; allow deepseek-ai/DeepSeek-V4-Flash-0731 in polypus router config.
+# Polypus: use gateway-qualified ids (GET /v1/apis/openai/models), e.g. deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731.
 ai_providers:
   polypus_deepseek:
     api_schema: openai
     api_key: local
-    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    model: deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731
     base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "120s"
   polypus_deepseek_rlm:
     api_schema: openai
     api_key: local
-    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    model: deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731
     base_url: "${POLYPUS_BASE_URL:-http://127.0.0.1:1320}/v1"
     timeout: "15m"
   polypus_gemma:
