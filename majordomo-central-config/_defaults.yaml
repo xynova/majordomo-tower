@@ -1,6 +1,10 @@
 # Majordomo — repository operations for evolving software.
 # Org-wide defaults for the control tower (xynova/majordomo-tower).
 # Per-repo files deep-merge on top: majordomo-central-config/<repo-id>.yaml
+#
+# Park a served repo in its own YAML (not here):
+#   enabled: false
+# Omitted or true: enrolled for poll and context digest. Explicit --repo-id fails closed when false.
 
 trigger:
   poll: true

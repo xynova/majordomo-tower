@@ -1,6 +1,8 @@
 # Served repo: https://github.com/xynova/content-pipelines
 # Secret: GH_TOKEN_XYNOVA (optional override MAJORDOMO_CREDENTIAL_CONTENT_PIPELINES).
 
+enabled: true
+
 scm: github
 
 repository:

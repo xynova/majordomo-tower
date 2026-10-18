@@ -1,6 +1,8 @@
 # Served repo: https://github.com/behaviorengineering/majordomo
 # Secret: GH_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_MAJORDOMO).
 
+enabled: false
+
 scm: github
 
 repository:

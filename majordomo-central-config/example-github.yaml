@@ -1,6 +1,7 @@
 # Example GitHub served-repo config (copy to <repo_id>.yaml and edit).
 # Secret: GH_TOKEN_YOUR_ORG (optional override MAJORDOMO_CREDENTIAL_EXAMPLE_GITHUB).
 # Org defaults live in _defaults.yaml — only override what differs.
+# enabled: false  # park poll and context digest; omit or true to enroll
 
 scm: github
 
