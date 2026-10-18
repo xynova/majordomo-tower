@@ -1,6 +1,8 @@
 # Served repo: https://github.com/behaviorengineering/gitboard
 # Secret: GH_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_GITBOARD).
 
+enabled: false
+
 scm: github
 
 repository:

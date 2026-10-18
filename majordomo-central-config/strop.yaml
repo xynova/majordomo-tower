@@ -1,6 +1,8 @@
 # Served repo: https://github.com/behaviorengineering/strop
 # Secret: GH_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_STROP).
 
+enabled: false
+
 scm: github
 
 repository:

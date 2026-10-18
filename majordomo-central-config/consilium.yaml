@@ -1,6 +1,8 @@
 # Served repo: https://gitlab.com/behaviorengineering/consilium
 # Secret: GITLAB_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_CONSILIUM).
 
+enabled: false
+
 scm: gitlab
 
 repository:

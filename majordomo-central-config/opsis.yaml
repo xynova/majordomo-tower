@@ -1,6 +1,8 @@
 # Served repo: https://gitlab.com/behaviorengineering/opsis
 # Secret: GITLAB_TOKEN_BEHAVIORENGINEERING (optional override MAJORDOMO_CREDENTIAL_OPSIS).
 
+enabled: false
+
 scm: gitlab
 
 repository:
